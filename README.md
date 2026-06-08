@@ -127,7 +127,7 @@ This yields the true MAE of `0.4231` dollars.
 
 ## 📖 Project Wiki
 A structured documentation set is maintained in the `wiki/` directory. This is designed for direct upload to the GitHub Wiki interface:
-- **[Home](wiki/Home.md)**: Main hub and quickstart.
-- **[System Architecture](wiki/System-Architecture)**: Design blueprints and execution logic flow.
-- **[Environment Setup](wiki/Environment-Setup)**: Local installation guides and API rate-limiting workarounds.
-- **[Weekly Reports](wiki/Weekly-Reports-Hub)**: Academic deliverables tracking sheet (links to Task C.1-C.7 reports).
+- **[Home](../../wiki/Home.md)**: Main hub and quickstart.
+- **[System Architecture](../../wiki/System-Architecture)**: Design blueprints and execution logic flow.
+- **[Environment Setup](../../wiki/Environment-Setup)**: Local installation guides and API rate-limiting workarounds.
+- **[Weekly Reports](../../wiki/Weekly-Reports-Hub)**: Academic deliverables tracking sheet (links to Task C.1-C.7 reports).
