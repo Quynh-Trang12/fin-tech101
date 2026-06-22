@@ -7,3 +7,5 @@ yfinance==0.2.48
 yahoo-fin==0.8.9.1
 requests-html==0.10.0
 lxml_html_clean==0.4.1
+mplfinance>=0.12.10b0
+pandas-datareader==0.10.0

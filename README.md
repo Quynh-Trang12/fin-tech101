@@ -92,17 +92,24 @@ Make sure your virtual environment is active (`(.venv)`) before executing the sc
 ### 1. Run Baseline v0.1 Model
 Executes the initial univariate model prediction workflow, saving the prediction plot to `results/v01_prediction.png`.
 ```powershell
-python src/v0.1/stock_prediction.py
+python baselines/v0.1/stock_prediction.py
 ```
 
-### 2. Train the Modular Model (P1-based)
-Trains the Stacked LSTM network using multivariate parameters specified in `src/parameters.py` and saves the optimal weights to `results/`.
+### 2. Run Baseline P1 Model
+Trains and evaluates the initial reference baseline, saving the prediction plot to `results/p1_prediction.png`.
+```powershell
+python baselines/p1/train.py
+python baselines/p1/test.py
+```
+
+### 3. Train the Active Modular Model
+Trains the Stacked recurrent networks using settings specified in `src/config.py` and saves weights to `results/`.
 ```powershell
 python src/train.py
 ```
 
-### 3. Evaluate and Simulate Trading
-Loads the trained weights, runs inferences on test data, prints performance metrics (MAE, RMSE, MAPE, Directional Accuracy), performs simulated trading, and plots forecasts.
+### 4. Evaluate and Simulate Trading
+Loads the trained weights from `results/`, runs inferences on test data, prints unscaled performance metrics (MAE, RMSE, MAPE, Directional Accuracy), performs simulated trading, and plots forecasts.
 ```powershell
 python src/test.py
 ```

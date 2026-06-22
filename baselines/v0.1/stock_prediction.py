@@ -49,41 +49,18 @@ import yfinance as yf
 import os
 import time
 
-def build_offline_sample_data():
-    """Generates a deterministic offline stock dataset matching the CBA.AX schema."""
-    dates = pd.bdate_range("2020-01-01", "2024-07-02")
-    rng = np.random.default_rng(314)
-    drift = np.linspace(0, 35, len(dates))
-    seasonal = 4 * np.sin(np.linspace(0, 12 * np.pi, len(dates)))
-    noise = rng.normal(0, 1.2, len(dates)).cumsum() * 0.08
-    close = 80 + drift + seasonal + noise
-    open_ = close + rng.normal(0, 0.7, len(dates))
-    high = np.maximum(open_, close) + rng.uniform(0.2, 1.4, len(dates))
-    low = np.minimum(open_, close) - rng.uniform(0.2, 1.4, len(dates))
-    volume = rng.integers(1_200_000, 5_500_000, len(dates))
-    return pd.DataFrame(
-        {
-            "Open": open_,
-            "High": high,
-            "Low": low,
-            "Close": close,
-            "Adj Close": close,
-            "Volume": volume,
-        },
-        index=dates,
-    )
-
 # Get the data for the stock
 data = yf.download(COMPANY,TRAIN_START,TRAIN_END)
 if data.empty:
     date_now = time.strftime("%Y-%m-%d")
-    cache_file = os.path.join("data", f"{COMPANY}_2026-06-08.csv")
+    cache_file = os.path.join("data", f"{COMPANY}_cache.csv")
     possible_paths = [
         cache_file,
+        os.path.join("data", f"{COMPANY}_2026-06-08.csv"),
         os.path.join("data", f"{COMPANY}_{date_now}.csv"),
-        os.path.join("..", "data", f"{COMPANY}_2026-06-08.csv"),
-        os.path.join("..", "..", "data", f"{COMPANY}_2026-06-08.csv"),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", f"{COMPANY}_2026-06-08.csv")
+        os.path.join("..", "data", f"{COMPANY}_cache.csv"),
+        os.path.join("..", "..", "data", f"{COMPANY}_cache.csv"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", f"{COMPANY}_cache.csv")
     ]
     loaded = False
     for path in possible_paths:
@@ -95,12 +72,14 @@ if data.empty:
             loaded = True
             break
     if not loaded:
-        print("Warning: Yahoo Finance data unavailable and no cached CSV file found. Generating offline sample data...")
-        data = build_offline_sample_data()
-        os.makedirs("data", exist_ok=True)
-        data.to_csv(cache_file)
-        print(f"Saved generated offline dataset to cache: {cache_file}")
-        data = data.loc[TRAIN_START:TRAIN_END]
+        raise ValueError(
+            f"Failed to download live stock data for {COMPANY} and no cached CSV file was found.\n"
+            f"If you are running in an offline or sandboxed environment, please download the real stock data manually:\n"
+            f"1. Navigate to: https://query2.finance.yahoo.com/v8/finance/chart/{COMPANY}?period1=1577836800&period2=1719964800&interval=1d\n"
+            f"2. Save the returned JSON data or convert/download it as a CSV file.\n"
+            f"3. Place the CSV file in the 'data/' directory as '{COMPANY}_cache.csv' to continue execution.\n"
+            f"Alternatively, you can run the download helper script: python src/data_downloader.py"
+        )
 
 #------------------------------------------------------------------------------
 # Prepare Data
@@ -244,13 +223,14 @@ TEST_END = '2024-07-02'
 test_data = yf.download(COMPANY,TEST_START,TEST_END)
 if test_data.empty:
     date_now = time.strftime("%Y-%m-%d")
-    cache_file = os.path.join("data", f"{COMPANY}_2026-06-08.csv")
+    cache_file = os.path.join("data", f"{COMPANY}_cache.csv")
     possible_paths = [
         cache_file,
+        os.path.join("data", f"{COMPANY}_2026-06-08.csv"),
         os.path.join("data", f"{COMPANY}_{date_now}.csv"),
-        os.path.join("..", "data", f"{COMPANY}_2026-06-08.csv"),
-        os.path.join("..", "..", "data", f"{COMPANY}_2026-06-08.csv"),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", f"{COMPANY}_2026-06-08.csv")
+        os.path.join("..", "data", f"{COMPANY}_cache.csv"),
+        os.path.join("..", "..", "data", f"{COMPANY}_cache.csv"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", f"{COMPANY}_cache.csv")
     ]
     loaded = False
     for path in possible_paths:
@@ -262,9 +242,14 @@ if test_data.empty:
             loaded = True
             break
     if not loaded:
-        print("Warning: yfinance returned empty test data and no cache found. Generating offline test data...")
-        test_data = build_offline_sample_data()
-        test_data = test_data.loc[TEST_START:TEST_END]
+        raise ValueError(
+            f"Failed to download live test stock data for {COMPANY} and no cached CSV file was found.\n"
+            f"If you are running in an offline or sandboxed environment, please download the real stock data manually:\n"
+            f"1. Navigate to: https://query2.finance.yahoo.com/v8/finance/chart/{COMPANY}?period1=1577836800&period2=1719964800&interval=1d\n"
+            f"2. Save the returned JSON data or convert/download it as a CSV file.\n"
+            f"3. Place the CSV file in the 'data/' directory as '{COMPANY}_cache.csv' to continue execution.\n"
+            f"Alternatively, you can run the download helper script: python src/data_downloader.py"
+        )
 
 
 # The above bug is the reason for the following line of code

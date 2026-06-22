@@ -6,6 +6,7 @@ logs/
 
 data/*
 !data/.gitkeep
+csv-results/*.csv
 
 *.h5
 *.keras
