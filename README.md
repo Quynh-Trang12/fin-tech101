@@ -10,7 +10,7 @@ FinTech101 is an end-to-end, machine learning-based stock price prediction syste
 
 This project is structured as a progression from initial environment setup and baseline verification, through data processing and exploratory data analysis, to advanced modeling techniques, ensembles, and custom supervised research extensions. 
 
-For detailed information on individual tasks, weekly progress, and in-depth technical specifications, please refer to the **[Project Wiki](wiki/Home)**.
+For detailed information on individual tasks, weekly progress, and in-depth technical specifications, please refer to the **[Project Wiki](#project-wiki)**.
 
 ---
 
