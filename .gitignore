@@ -7,14 +7,13 @@ logs/
 data/*
 !data/.gitkeep
 csv-results/*.csv
+csv-results/c*/*.csv
 
 *.h5
 *.keras
 *.pkl
 *.joblib
 
-reports/task_c*/screenshots/*
-!reports/task_c*/screenshots/.gitkeep
 docs/*
 wiki/*
 

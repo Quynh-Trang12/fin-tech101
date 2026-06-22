@@ -69,6 +69,11 @@ The script executes successfully in the virtual environment:
 - **Next-day prediction**: ~$115.95 (stochastic run output)
 - **Saved Output Plot**: `results/v01_prediction.png`
 
+#### Execution Evidence (v0.1 Baseline)
+| Terminal Run | Prediction Plot |
+| :---: | :---: |
+| ![v0.1 Terminal Execution](screenshots/v01_terminal.png) | ![v0.1 Prediction Plot](../../results/c1/v01_prediction.png) |
+
 ---
 
 ## 3. Reference Model (P1) Analysis & Bug Discovery
@@ -96,6 +101,11 @@ Running the training and evaluation pipelines:
 ```
 - **Future price predicted (t+15)**: $114.95
 - **Saved Output Plot**: `results/p1_prediction.png`
+
+#### Execution Evidence (P1 Reference)
+| Terminal Run | Prediction Plot |
+| :---: | :---: |
+| ![P1 Terminal Execution](screenshots/p1_terminal.png) | ![P1 Prediction Plot](../../results/c1/p1_prediction.png) |
 
 ### 3.3 Analysis of P1's Mathematical MAE Bug
 During testing, the original P1 code printed a Mean Absolute Error (MAE) of `80.93` dollars, which is mathematically implausible since the predicted prices track actual prices closely. 

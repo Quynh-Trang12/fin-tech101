@@ -310,9 +310,13 @@ plt.title(f"{COMPANY} Share Price")
 plt.xlabel("Time")
 plt.ylabel(f"{COMPANY} Share Price")
 plt.legend()
-os.makedirs("results", exist_ok=True)
-plt.savefig(os.path.join("results", "v01_prediction.png"), dpi=150, bbox_inches="tight")
-print("Saved prediction plot to results/v01_prediction.png")
+os.makedirs(os.path.join("results", "c1"), exist_ok=True)
+plot_path = "results/c1/v01_prediction.png"
+if os.path.exists(plot_path):
+    os.remove(plot_path)
+    print(f"[v0.1 Pipeline] Overwriting existing prediction plot at: {plot_path}")
+plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+print(f"Saved prediction plot to {plot_path}")
 
 #------------------------------------------------------------------------------
 # Predict next day

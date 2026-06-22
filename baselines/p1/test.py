@@ -17,9 +17,13 @@ def plot_graph(test_df):
     plt.xlabel("Days")
     plt.ylabel("Price")
     plt.legend(["Actual Price", "Predicted Price"])
-    os.makedirs("results", exist_ok=True)
-    plt.savefig("results/p1_prediction.png", dpi=150, bbox_inches="tight")
-    print("Saved prediction plot to results/p1_prediction.png")
+    os.makedirs(os.path.join("results", "c1"), exist_ok=True)
+    plot_path = "results/c1/p1_prediction.png"
+    if os.path.exists(plot_path):
+        os.remove(plot_path)
+        print(f"[P1 Test] Overwriting existing prediction plot at: {plot_path}")
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    print(f"Saved prediction plot to {plot_path}")
 
 
 def get_final_df(model, data):
@@ -90,8 +94,8 @@ data = load_data(ticker, N_STEPS, scale=SCALE, split_by_date=SPLIT_BY_DATE,
 model = create_model(N_STEPS, len(FEATURE_COLUMNS), loss=LOSS, units=UNITS, cell=CELL, n_layers=N_LAYERS,
                     dropout=DROPOUT, optimizer=OPTIMIZER, bidirectional=BIDIRECTIONAL)
 
-# load optimal model weights from results folder
-model_path = os.path.join("results", model_name) + ".weights.h5"
+# load optimal model weights from results/c1 folder
+model_path = os.path.join("results", "c1", model_name) + ".weights.h5"
 model.load_weights(model_path)
 
 # evaluate the model
@@ -127,9 +131,13 @@ print("Profit per trade:", profit_per_trade)
 # plot true/pred prices graph
 plot_graph(final_df)
 print(final_df.tail(10))
-# save the final dataframe to csv-results folder
-csv_results_folder = "csv-results"
-if not os.path.isdir(csv_results_folder):
-    os.mkdir(csv_results_folder)
+# save the final dataframe to csv-results/c1 folder
+csv_results_folder = os.path.join("csv-results", "c1")
+os.makedirs(csv_results_folder, exist_ok=True)
 csv_filename = os.path.join(csv_results_folder, model_name + ".csv")
+
+if os.path.exists(csv_filename):
+    os.remove(csv_filename)
+    print(f"[P1 Test] Overwriting existing CSV results at: {csv_filename}")
+    
 final_df.to_csv(csv_filename)

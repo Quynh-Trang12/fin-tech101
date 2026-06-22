@@ -17,7 +17,7 @@ This report documents the design, implementation, and empirical results of the d
 ## 1. Pipeline Architecture & Implementation Details
 
 ### 1.1 Dynamic Model Factory (`src/model_factory.py`)
-To build models programmatically, we implemented the `build_dl_model` function in [model_factory.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/model_factory.py). The factory:
+To build models programmatically, we implemented the `build_dl_model` function in `model_factory.py`. The factory:
 * Resolves cell string keys (`"LSTM"`, `"GRU"`, `"SimpleRNN"`) to respective Keras layer classes.
 * Assembles stacked recurrent layers. To support stack depth, all layers except the last must set `return_sequences=True`. The terminal recurrent layer sets `return_sequences=False` to produce a 2D state vector.
 * Supports Keras `Bidirectional` wrapper layers.
@@ -27,11 +27,11 @@ To build models programmatically, we implemented the `build_dl_model` function i
 ### 1.2 Training Pipeline (`src/train.py`)
 The training script [train.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/train.py) coordinates data preprocessing and model optimization. Key features:
 * **Global Seed Determinism**: Sets `os.environ['PYTHONHASHSEED']`, `random.seed(314)`, `np.random.seed(314)`, and `tf.random.set_seed(314)` at import time and function execution to ensure reproducible model initializations.
-* **Date Splitting Integration**: Loads the real daily dataset from [data_processing.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/data_processing.py) with a strict chronological split (`split_date="2023-08-02"`).
+* **Date Splitting Integration**: Loads the real daily dataset from `data_processing.py` with a strict chronological split (`split_date="2023-08-02"`).
 * **Weight Checkpoint Saving**: Trains models using TensorFlow callbacks/fit interfaces and writes weight matrices to `results/{model_name}.weights.h5`.
 
 ### 1.3 Testing Pipeline & Metric Evaluation (`src/test.py`)
-The evaluation script [test.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/test.py) loads weight checkpoints and evaluates test data. It resolves the Keras MAE scaling bug by inverting predicted and actual prices *before* calculating errors, ensuring correct unscaled metrics:
+The evaluation script `test.py` loads weight checkpoints and evaluates test data. It resolves the Keras MAE scaling bug by inverting predicted and actual prices *before* calculating errors, ensuring correct unscaled metrics:
 1. **Mean Absolute Error (MAE)**:
    $$MAE = \frac{1}{N} \sum_{t=1}^{N} |y_t - \hat{y}_t|$$
 2. **Root Mean Squared Error (RMSE)**:
@@ -51,35 +51,35 @@ To isolate and test specific neural architectural assumptions, we defined 8 conf
 
 The configuration keys are self-descriptive: the prefix identifies the recurrent cell type (`LSTM`, `GRU`, `RNN`) and the suffix describes the structural variant (`BASE`, `STACKED`, `SHALLOW`, `WIDE`, `NARROW`, `MSE`).
 
-| Model Name | Cell Type | Layers | Units | Loss | Epochs | Batch Size | Hypothesis Tested |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **LSTM_BASE** | LSTM | 2 | 128 | Huber | 20 | 64 | Standard baseline control benchmark |
-| **GRU_BASE** | GRU | 2 | 128 | Huber | 20 | 64 | GRU parameter efficiency (no separate cell state) |
-| **RNN_BASE** | SimpleRNN | 2 | 128 | Huber | 20 | 64 | Vanishing gradients on 50-day windows |
-| **LSTM_STACKED** | LSTM | 3 | 128 | Huber | 20 | 64 | Representational hierarchy vs parameter overfitting |
-| **LSTM_SHALLOW** | LSTM | 1 | 128 | Huber | 20 | 64 | Occam's Razor: simple regularization |
-| **LSTM_WIDE** | LSTM | 2 | 256 | Huber | 20 | 64 | State capacity expansion vs overfitting noise |
-| **LSTM_NARROW** | LSTM | 2 | 64 | Huber | 20 | 64 | Bottleneck compression as regularizer |
-| **LSTM_MSE** | LSTM | 2 | 128 | MSE | 20 | 64 | Outlier sensitivity (quadratic) vs robust (Huber) fitting |
+| Model Name       | Cell Type | Layers | Units | Loss  | Epochs | Batch Size | Hypothesis Tested                                         |
+| :--------------- | :-------- | :----- | :---- | :---- | :----- | :--------- | :-------------------------------------------------------- |
+| **LSTM_BASE**    | LSTM      | 2      | 128   | Huber | 20     | 64         | Standard baseline control benchmark                       |
+| **GRU_BASE**     | GRU       | 2      | 128   | Huber | 20     | 64         | GRU parameter efficiency (no separate cell state)         |
+| **RNN_BASE**     | SimpleRNN | 2      | 128   | Huber | 20     | 64         | Vanishing gradients on 50-day windows                     |
+| **LSTM_STACKED** | LSTM      | 3      | 128   | Huber | 20     | 64         | Representational hierarchy vs parameter overfitting       |
+| **LSTM_SHALLOW** | LSTM      | 1      | 128   | Huber | 20     | 64         | Occam's Razor: simple regularization                      |
+| **LSTM_WIDE**    | LSTM      | 2      | 256   | Huber | 20     | 64         | State capacity expansion vs overfitting noise             |
+| **LSTM_NARROW**  | LSTM      | 2      | 64    | Huber | 20     | 64         | Bottleneck compression as regularizer                     |
+| **LSTM_MSE**     | LSTM      | 2      | 128   | MSE   | 20     | 64         | Outlier sensitivity (quadratic) vs robust (Huber) fitting |
 
 ---
 
 ## 3. Empirical Results & Comparative Analysis
 
-We executed the sweep using the modular experiment runner [run_sweeps.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/run_sweeps.py), which references parameters defined in [config.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/config.py). The results are tabulated below:
+We executed the sweep using the modular experiment runner `run_c4_sweeps.py`, which references parameters defined in `config.py`. The results are tabulated below:
 
 ### 3.1 Sweep Metrics Table
 
-| Model Name | Cell Type | Layers | Units | Loss | MAE ($) | RMSE ($) | MAPE (%) | DA (%) | Trading Acc (%) | Total Profit ($) | Profit/Trade ($) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **LSTM_BASE** | LSTM | 2 | 128 | huber | 3.0486 | 3.5555 | 2.87% | 45.02% | 45.02% | -$21.17 | -$0.09 |
-| **GRU_BASE** | GRU | 2 | 128 | huber | 3.5731 | 3.8624 | 3.42% | 45.89% | 45.89% | -$24.90 | -$0.11 |
-| **RNN_BASE** | SimpleRNN | 2 | 128 | huber | **2.0370** | **2.5901** | **1.89%** | 45.02% | 45.02% | -$21.12 | -$0.09 |
-| **LSTM_STACKED** | LSTM | 3 | 128 | huber | 3.9252 | 4.6676 | 3.66% | **46.32%** | **46.32%** | **-$18.18** | **-$0.08** |
-| **LSTM_SHALLOW** | LSTM | 1 | 128 | huber | 4.4890 | 4.8137 | 4.30% | 45.89% | 45.89% | -$24.90 | -$0.11 |
-| **LSTM_WIDE** | LSTM | 2 | 256 | huber | 3.9878 | 4.4780 | 3.76% | 45.45% | 45.45% | -$25.54 | -$0.11 |
-| **LSTM_NARROW** | LSTM | 2 | 64 | huber | 2.8820 | 3.4455 | 2.70% | 45.02% | 45.02% | -$25.56 | -$0.11 |
-| **LSTM_MSE** | LSTM | 2 | 128 | mse | 3.0625 | 3.5699 | 2.88% | 45.02% | 45.02% | -$21.17 | -$0.09 |
+| Model Name       | Cell Type | Layers | Units | Loss  | MAE ($)    | RMSE ($)   | MAPE (%)  | DA (%)     | Trading Acc (%) | Total Profit ($) | Profit/Trade ($) |
+| :--------------- | :-------- | :----- | :---- | :---- | :--------- | :--------- | :-------- | :--------- | :-------------- | :--------------- | :--------------- |
+| **LSTM_BASE**    | LSTM      | 2      | 128   | huber | 3.0486     | 3.5555     | 2.87%     | 45.02%     | 45.02%          | -$21.17          | -$0.09           |
+| **GRU_BASE**     | GRU       | 2      | 128   | huber | 3.5731     | 3.8624     | 3.42%     | 45.89%     | 45.89%          | -$24.90          | -$0.11           |
+| **RNN_BASE**     | SimpleRNN | 2      | 128   | huber | **2.0370** | **2.5901** | **1.89%** | 45.02%     | 45.02%          | -$21.12          | -$0.09           |
+| **LSTM_STACKED** | LSTM      | 3      | 128   | huber | 3.9252     | 4.6676     | 3.66%     | **46.32%** | **46.32%**      | **-$18.18**      | **-$0.08**       |
+| **LSTM_SHALLOW** | LSTM      | 1      | 128   | huber | 4.4890     | 4.8137     | 4.30%     | 45.89%     | 45.89%          | -$24.90          | -$0.11           |
+| **LSTM_WIDE**    | LSTM      | 2      | 256   | huber | 3.9878     | 4.4780     | 3.76%     | 45.45%     | 45.45%          | -$25.54          | -$0.11           |
+| **LSTM_NARROW**  | LSTM      | 2      | 64    | huber | 2.8820     | 3.4455     | 2.70%     | 45.02%     | 45.02%          | -$25.56          | -$0.11           |
+| **LSTM_MSE**     | LSTM      | 2      | 128   | mse   | 3.0625     | 3.5699     | 2.88%     | 45.02%     | 45.02%          | -$21.17          | -$0.09           |
 
 ### 3.2 Key Findings and Architectural Analysis
 
@@ -109,9 +109,9 @@ The charts below show the actual versus predicted prices on the test set.
 - The **LSTM_BASE** plot shows the typical smoothing effect of LSTM models.
 - The **RNN_BASE** plot tracks the actual prices more closely, leading to its superior MAE score:
 
-| LSTM_BASE | RNN_BASE |
-| :---: | :---: |
-| ![LSTM_BASE Prediction](file:///s:/COS30018-Intelligent-System/fin-tech101/results/LSTM_BASE_prediction.png) | ![RNN_BASE Prediction](file:///s:/COS30018-Intelligent-System/fin-tech101/results/RNN_BASE_prediction.png) |
+|                             LSTM_BASE                              |                             RNN_BASE                             |
+| :----------------------------------------------------------------: | :--------------------------------------------------------------: |
+| ![LSTM_BASE Prediction](../../results/c4/LSTM_BASE_prediction.png) | ![RNN_BASE Prediction](../../results/c4/RNN_BASE_prediction.png) |
 
 ---
 
@@ -124,19 +124,21 @@ fin-tech101/
 ├── data/
 │   └── CBA.AX_cache.csv             # Cleaned historical data cache (2020-01-01 to 2024-07-04)
 ├── results/
-│   ├── LSTM_BASE_prediction.png     # LSTM_BASE Forecast Plot
-│   ├── RNN_BASE_prediction.png      # RNN_BASE Forecast Plot
-│   └── c4_sweep_results.csv         # Consolidated sweep results CSV
+│   └── c4/
+│       ├── LSTM_BASE_prediction.png     # LSTM_BASE Forecast Plot
+│       ├── RNN_BASE_prediction.png      # RNN_BASE Forecast Plot
+│       └── c4_sweep_results.csv         # Consolidated sweep results CSV
 ├── reports/
 │   └── task_c4/
 │       ├── Task C.4 Report.md       # This report
 │       └── screenshots/
 │           └── c4_terminal.png      # PowerShell sweep run screenshot
 └── src/
+
     ├── config.py                    # Experiment parameters & sweep settings (Task C.4)
     ├── data_processing.py           # Preprocessing & chronological splits (Task C.2)
     ├── model_factory.py             # Dynamic recurrent model factory (Task C.4)
-    ├── run_sweeps.py                # Sweeps experiment runner script (Task C.4)
+    ├── run_c4_sweeps.py             # Sweeps experiment runner script (Task C.4)
     ├── train.py                     # Training pipeline (Task C.4)
     └── test.py                      # Unscaled testing pipeline (Task C.4)
 ```

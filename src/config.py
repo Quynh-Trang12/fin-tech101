@@ -1,8 +1,8 @@
-# ==============================================================================
-# File: config.py
-# Purpose: Global configurations, feature settings, and experiment sweep
-#          parameters for FinTech101 stock forecasting.
-# ==============================================================================
+# ================================================================
+# Purpose: 
+# Global configurations, feature settings, and experiment sweep
+# parameters for FinTech101 stock forecasting.
+# ================================================================
 
 # ==============================================================================
 # GLOBAL DATA & PREPROCESSING CONFIGURATIONS
@@ -13,8 +13,9 @@ END_DATE = "2024-07-02"
 SPLIT_DATE = "2023-08-02"  # Chronological split boundary date (train ends 2023-08-01, test starts 2023-08-02)
 
 # ----- Sliding Window Parameters -----
-N_STEPS = 50       # Lookback sequence window size (days)
-LOOKUP_STEP = 1    # Forecast horizon (days ahead)
+LOOKBACK_STEPS = 50       # Lookback sequence window size (days)
+FORECAST_OFFSET = 1       # Days ahead to start forecast (offset)
+FUTURE_STEPS = 1          # Number of future steps/days to predict
 
 # ----- Feature Definition -----
 FEATURE_COLUMNS = ['adjclose', 'volume', 'open', 'high', 'low']

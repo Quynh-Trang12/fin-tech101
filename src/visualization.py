@@ -1,6 +1,6 @@
 # ==============================================================================
-# File: visualization.py
-# Purpose: Implementation of stock market visualizations (Candlestick & Boxplot)
+# Purpose: 
+# Implementation of stock market visualizations (Candlestick & Boxplot)
 # ==============================================================================
 
 import os
@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import mplfinance as mpf
+
+from config import TICKER, START_DATE, END_DATE
+from data_processing import load_and_process_data
 
 # ==============================================================================
 # CANDLESTICK VISUALIZATION PIPELINE
@@ -220,3 +223,60 @@ def plot_moving_boxplot(df, n_days, output_path, title=None):
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"[Visualization] Saved boxplot chart to: {output_path}")
+
+
+
+# ==============================================================================
+# MAIN EXECUTION FOR TASK C.3 (Standalone Visualizations)
+# ==============================================================================
+
+if __name__ == '__main__':
+    print("=" * 80)
+    print(f"STARTING TASK C.3: VISUALIZATION EXPORTS FOR {TICKER}")
+    print("=" * 80)
+
+    # --------------------------------------------------------------------------
+    # Phase 1: Centralized Data Retrieval
+    # --------------------------------------------------------------------------
+    print("[Visualization] Loading and processing data using centralized pipeline...")
+    # Utilize the modular loader to ensure consistent caching, scaling, and handling
+    data = load_and_process_data(
+        ticker=TICKER,
+        start_date=START_DATE,
+        end_date=END_DATE,
+        scale=False,
+        split_by_date=False
+    )
+    df = data["df"]
+
+    # --------------------------------------------------------------------------
+    # Phase 2: Output Directory Initialization
+    # --------------------------------------------------------------------------
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    output_dir = os.path.join(project_root, "results", "c3")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # --------------------------------------------------------------------------
+    # Phase 3: Visualization Generation
+    # --------------------------------------------------------------------------
+    
+    # 3.1: 5-Day Candlestick Chart (Weekly Aggregation)
+    candle_path = os.path.join(output_dir, f"{TICKER}_5day_candlestick.png")
+    if os.path.exists(candle_path):
+        os.remove(candle_path)
+    print("\n[Task C.3] Generating 5-day aggregated candlestick chart...")
+    plot_candlestick(df, n_days=5, output_path=candle_path)
+    
+    # 3.2: 10-Day Moving Boxplot (Monthly Aggregation)
+    boxplot_path = os.path.join(output_dir, f"{TICKER}_10day_boxplot.png")
+    if os.path.exists(boxplot_path):
+        os.remove(boxplot_path)
+    print("\n[Task C.3] Generating 10-day moving boxplot distribution...")
+    plot_moving_boxplot(df, n_days=10, output_path=boxplot_path)
+    
+    # --------------------------------------------------------------------------
+    # Phase 4: Completion Validation
+    # --------------------------------------------------------------------------
+    print("\n" + "=" * 80)
+    print(f"TASK C.3 COMPLETED: Visualizations successfully saved to {output_dir}")
+    print("=" * 80)

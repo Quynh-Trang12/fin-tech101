@@ -1,6 +1,6 @@
 # ==============================================================================
-# File: data_downloader.py
-# Purpose: Direct API stock data downloader utilizing query2.finance.yahoo.com
+# Purpose: 
+# Direct API stock data downloader utilizing query2.finance.yahoo.com
 # ==============================================================================
 
 import os

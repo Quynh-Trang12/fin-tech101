@@ -1,7 +1,7 @@
 # ==============================================================================
-# File: model_factory.py
-# Purpose: Dynamic construction of Deep Learning models (LSTM, GRU, SimpleRNN)
-#          for financial time-series prediction.
+# Purpose: 
+# Dynamic construction of Deep Learning models (LSTM, GRU, SimpleRNN)
+# for financial time-series prediction.
 # ==============================================================================
 
 import tensorflow as tf
@@ -13,7 +13,7 @@ from tensorflow.keras.layers import LSTM, GRU, SimpleRNN, Dense, Dropout, Bidire
 # ==============================================================================
 
 def build_dl_model(
-    sequence_length,
+    lookback_steps,
     n_features,
     units=128,
     cell_type="LSTM",
@@ -21,13 +21,14 @@ def build_dl_model(
     dropout=0.3,
     loss="huber",
     optimizer="adam",
-    bidirectional=False
+    bidirectional=False,
+    future_steps=1
 ):
     """
     Constructs and compiles a deep recurrent neural network using TensorFlow/Keras.
     
     Args:
-        sequence_length (int): Lookback window size (number of historical days).
+        lookback_steps (int): Lookback window size (number of historical days).
         n_features (int): Number of feature columns in input sequences.
         units (int): Number of hidden units in recurrent layers.
         cell_type (str): Recurrent cell architecture ('LSTM', 'GRU', 'SimpleRNN').
@@ -36,6 +37,7 @@ def build_dl_model(
         loss (str): Loss function identifier (e.g. 'huber', 'mse', 'mae').
         optimizer (str): Optimizer identifier (e.g. 'adam', 'rmsprop').
         bidirectional (bool): If True, wraps recurrent layers in Bidirectional wrappers.
+        future_steps (int): Number of future steps/days to predict (default 1).
         
     Returns:
         tf.keras.Model: Compiled Keras Sequential model.
@@ -78,7 +80,7 @@ def build_dl_model(
         
         # Set input shape for the initial recurrent layer
         if i == 0:
-            layer_kwargs["input_shape"] = (sequence_length, n_features)
+            layer_kwargs["input_shape"] = (lookback_steps, n_features)
             
         # Instantiate recurrent cell
         recurrent_layer = cell_class(**layer_kwargs)
@@ -87,7 +89,7 @@ def build_dl_model(
         if bidirectional:
             if i == 0:
                 # Keras Bidirectional wrapper needs input_shape passed via kwargs/args
-                model.add(Bidirectional(recurrent_layer, input_shape=(sequence_length, n_features)))
+                model.add(Bidirectional(recurrent_layer, input_shape=(lookback_steps, n_features)))
             else:
                 model.add(Bidirectional(recurrent_layer))
         else:
@@ -100,8 +102,8 @@ def build_dl_model(
     # --------------------------------------------------------------------------
     # Step 3: Compile Network with Targets
     # --------------------------------------------------------------------------
-    # Output layer produces a single scalar corresponding to next day's price prediction
-    model.add(Dense(1, activation="linear"))
+    # Output layer produces predictions for the specified future time steps
+    model.add(Dense(future_steps, activation="linear"))
     
     # Compile model using unscaled MAE as a tracking metric during training
     model.compile(

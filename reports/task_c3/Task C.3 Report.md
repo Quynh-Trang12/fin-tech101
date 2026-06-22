@@ -65,17 +65,17 @@ Standard time-series libraries often aggregate stock data using calendar frequen
 
 ## 3. Verification Log & Visual Artifacts
 
-To verify the visualization module, we executed a script that loads the cached `CBA.AX` dataset (covering `2020-01-01` to `2024-07-02`), extracts the unscaled historical values, and saves the output charts to the `results/` folder:
+To verify the visualization module, we executed a script that loads the cached `CBA.AX` dataset (covering `2020-01-01` to `2024-07-02`), extracts the unscaled historical values, and saves the output charts to the `results/c3/` folder:
 
 ```powershell
-.venv\Scripts\python.exe -c "from src.data_processing import load_and_process_data; from src.visualization import plot_candlestick, plot_moving_boxplot; data = load_and_process_data('CBA.AX', '2020-01-01', '2024-07-02', scale=False); df = data['df']; plot_candlestick(df, n_days=5, output_path='results/cba_candlestick_5day.png'); plot_moving_boxplot(df, n_days=10, output_path='results/cba_boxplot_10day.png')"
+.venv\Scripts\python.exe src/visualization.py
 ```
 
 ### Verification Console Output
 ```text
 [Data Cache] Loading local cache: data\CBA.AX_cache.csv
-[Visualization] Saved candlestick chart to: results/cba_candlestick_5day.png
-[Visualization] Saved boxplot chart to: results/cba_boxplot_10day.png
+[Visualization] Saved candlestick chart to: results/c3/cba_candlestick_5day.png
+[Visualization] Saved boxplot chart to: results/c3/cba_boxplot_10day.png
 ```
 
 #### Terminal Execution Screenshot
@@ -83,12 +83,15 @@ To verify the visualization module, we executed a script that loads the cached `
 
 ### 3.1 Visual Observations and Findings
 
+|                         5-Day Candlestick Chart                          |                        10-Day Moving Boxplot                        |
+| :----------------------------------------------------------------------: | :-----------------------------------------------------------------: |
+| ![5-Day Candlestick Chart](../../results/c3/CBA.AX_5day_candlestick.png) | ![10-Day Moving Boxplot](../../results/c3/CBA.AX_10day_boxplot.png) |
+
 1. **Candlestick Chart (5-Day aggregation)**:
-   * **Path**: [cba_candlestick_5day.png](file:///s:/COS30018-Intelligent-System/fin-tech101/results/cba_candlestick_5day.png)
    * **Analysis**: Each candle represents a full week of trading (5 sessions). Volatility is summarized by the height of the wicks (High-Low spreads), while the real bodies (Open-Close) indicate whether the week closed up or down. The volume subplot mirrors the candles, showing which weekly moves were backed by heavy institutional trading.
 2. **Moving Boxplot Chart (10-Day windows)**:
-   * **Path**: [cba_boxplot_10day.png](file:///s:/COS30018-Intelligent-System/fin-tech101/results/cba_boxplot_10day.png)
    * **Analysis**: Each box summarizes the distribution of `CBA.AX` adjusted close prices over a 2-week trading window (10 sessions). This reveals shifts in the central tendency (moving orange medians) and changes in volatility (box heights). Narrow boxes indicate tight consolidation, while tall boxes indicate aggressive trends or high uncertainty. Outliers appear as red circles during sudden price gaps.
+
 
 ---
 
@@ -100,4 +103,4 @@ To verify the visualization module, we executed a script that loads the cached `
 ---
 
 ## Conclusion
-Task C.3 has been completed. The visualizers in `src/visualization.py` are robust, modular, and use a consistent code divider style. The outputs are verified and saved in `results/`, making the project ready to transition to Task C.4 (Machine Learning 1).
+Task C.3 has been completed. The visualizers in `src/visualization.py` are robust, modular, and use a consistent code divider style. The outputs are verified and saved in `results/c3/`, making the project ready to transition to Task C.4 (Machine Learning 1).

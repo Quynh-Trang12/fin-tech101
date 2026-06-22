@@ -1,6 +1,6 @@
 # ==============================================================================
-# File: data_processing.py
-# Purpose: Modular time-series data loader, cache, split, and scaler pipelines.
+# Purpose: 
+# Modular time-series data loader, cache, split, and scaler pipelines.
 # ==============================================================================
 
 import os
@@ -19,15 +19,16 @@ def load_and_process_data(
     ticker,
     start_date,
     end_date,
-    n_steps=50,
+    lookback_steps=50,
     scale=True,
     shuffle=True,
-    lookup_step=1,
+    forecast_offset=1,
     split_by_date=True,
     split_ratio=0.8,
     split_date=None,
     feature_columns=['adjclose', 'volume', 'open', 'high', 'low'],
-    cache_dir="data"
+    cache_dir="data",
+    future_steps=1
 ):
     """
     Loads daily stock market data, applies scaling, handles missing values (NaNs),
@@ -37,15 +38,16 @@ def load_and_process_data(
         ticker (str): The stock symbol (e.g. 'CBA.AX').
         start_date (str): Start date for data range (YYYY-MM-DD).
         end_date (str): End date for data range (YYYY-MM-DD).
-        n_steps (int): The lookback sequence length (number of historical days).
+        lookback_steps (int): The lookback sequence length (number of historical days).
         scale (bool): Whether to scale feature columns to [0, 1].
         shuffle (bool): Whether to shuffle the train dataset.
-        lookup_step (int): Number of days ahead to forecast.
+        forecast_offset (int): Number of days ahead to forecast.
         split_by_date (bool): If True, splits chronologically. If False, splits randomly.
         split_ratio (float): Ratio of training samples (e.g., 0.8 for 80% train).
         split_date (str): Optional. Split by a specific date instead of ratio.
         feature_columns (list): Columns to extract as features.
         cache_dir (str): Location to save and load CSV data caches.
+        future_steps (int): Number of future steps to predict.
         
     Returns:
         dict: Processed data dictionary containing:
@@ -144,29 +146,29 @@ def load_and_process_data(
     # --------------------------------------------------------------------------
     # Phase 6: Temporal Sequence & Target Construction
     # --------------------------------------------------------------------------
-    # Create the prediction targets by shifting Adj Close forward by lookup_step
-    df['future'] = df['adjclose'].shift(-lookup_step)
-    
-    # Settle the last sequence before dropping NaNs (used for future forecasts)
-    last_sequence = np.array(df[feature_columns].tail(lookup_step))
-    
-    # Drop rows containing NaNs introduced by the future target shift
-    df.dropna(subset=['future'], inplace=True)
-    
-    sequence_data = []
-    sequences = deque(maxlen=n_steps)
-    
-    # Create sliding windows of historical observations
-    for entry, target in zip(df[feature_columns + ["date"]].values, df['future'].values):
-        sequences.append(entry)
-        if len(sequences) == n_steps:
-            sequence_data.append([np.array(sequences), target])
-            
-    # Append the last sequences to generate predictions beyond the dataset range
-    last_sequence = list([s[:len(feature_columns)] for s in sequences]) + list(last_sequence)
-    last_sequence = np.array(last_sequence).astype(np.float32)
+    # Construct target columns for the forecast horizon (future_steps)
+    target_columns = []
+    for i in range(future_steps):
+        col_name = f"future_{i}"
+        df[col_name] = df['adjclose'].shift(-(forecast_offset + i))
+        target_columns.append(col_name)
+        
+    # Save the tail sequence of features for future forecasting
+    last_sequence = df[feature_columns].tail(lookback_steps).values.astype(np.float32)
     result['last_sequence'] = last_sequence
     
+    # Drop rows containing NaNs introduced by the future target shifts
+    df.dropna(subset=target_columns, inplace=True)
+    
+    sequence_data = []
+    sequences = deque(maxlen=lookback_steps)
+    
+    # Create sliding windows of historical observations
+    for entry, target in zip(df[feature_columns + ["date"]].values, df[target_columns].values):
+        sequences.append(entry)
+        if len(sequences) == lookback_steps:
+            sequence_data.append([np.array(sequences), target])
+            
     # Separate features (X) and targets (y)
     X, y = [], []
     for seq, target in sequence_data:
