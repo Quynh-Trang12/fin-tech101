@@ -3,9 +3,9 @@ import time
 from tensorflow.keras.layers import LSTM
 
 # Window size or the sequence length
-N_STEPS = 50
+N_STEPS = 60
 # Lookup step, 1 is the next day
-LOOKUP_STEP = 15
+LOOKUP_STEP = 1
 
 # whether to scale feature columns & output price as well
 SCALE = True

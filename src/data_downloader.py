@@ -102,12 +102,9 @@ if __name__ == "__main__":
         os.makedirs(data_dir, exist_ok=True)
         
         cache_path = os.path.join(data_dir, f"{ticker}_cache.csv")
-        legacy_path = os.path.join(data_dir, f"{ticker}_2026-06-08.csv")
         
         df.to_csv(cache_path)
-        df.to_csv(legacy_path)
         print(f"[Downloader] Successfully saved real stock data to: {cache_path}")
-        print(f"[Downloader] Successfully saved real stock data to: {legacy_path}")
         
     except Exception as e:
         print(f"[Downloader] Execution error: {e}")
