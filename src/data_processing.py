@@ -4,21 +4,31 @@
 # sequence construction for FinTech101 time-series forecasting experiments.
 # ==============================================================================
 
-import os
+from pathlib import Path
 import pickle
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from config import (
+    END_DATE,
+    FEATURE_COLUMNS,
+    FORECAST_OFFSET,
+    FUTURE_STEPS,
+    LOOKBACK_STEPS,
+    SPLIT_DATE,
+    START_DATE,
+    TICKER,
+    DATA_DIR,
+    RESULTS_DIR,
+)
 
 # ==============================================================================
 # CONSTANTS
 # ==============================================================================
 
-DEFAULT_FEATURE_COLUMNS = ["adjclose", "volume", "open", "high", "low"]
 TARGET_COLUMN = "adjclose"
 RANDOM_SEED = 314
 
@@ -32,7 +42,7 @@ def load_raw_stock_data(
     ticker: str,
     start_date: str,
     end_date: str,
-    cache_dir: str = "data",
+    cache_dir: Path = DATA_DIR,
 ) -> pd.DataFrame:
     """Load stock data from a local cache, or download it when no cache exists.
 
@@ -51,15 +61,18 @@ def load_raw_stock_data(
     Raises:
         ValueError: If live download fails and no cache file is available.
     """
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    cache_path = os.path.join(cache_dir, f"{ticker}_cache.csv")
+    cache_path = cache_dir / f"{ticker}_cache.csv"
 
-    if os.path.exists(cache_path):
-        print(f"[Data Cache] Loading local cache: {cache_path}")
+    if cache_path.exists():
+        print(f"[Data Cache] Loading local cache: {cache_path.as_posix()}")
         return pd.read_csv(cache_path, index_col=0, parse_dates=True)
 
     print(f"[Data Download] Downloading live data for {ticker} from yfinance...")
+
+    import yfinance as yf
+
     raw_df = yf.download(ticker, start=start_date, end=end_date)
 
     if raw_df.empty:
@@ -70,7 +83,7 @@ def load_raw_stock_data(
         )
 
     raw_df.to_csv(cache_path)
-    print(f"[Data Cache] Saved downloaded data to: {cache_path}")
+    print(f"[Data Cache] Saved downloaded data to: {cache_path.as_posix()}")
 
     return raw_df
 
@@ -151,7 +164,7 @@ def add_future_targets(
     df: pd.DataFrame,
     forecast_offset: int,
     future_steps: int,
-) -> Tuple[pd.DataFrame, List[str], List[str]]:
+) -> tuple[pd.DataFrame, list[str], list[str]]:
     """Add future price labels and their corresponding calendar dates.
 
     The target date columns are needed because leakage-safe splitting must be
@@ -204,10 +217,10 @@ def add_future_targets(
 def build_sequences(
     df: pd.DataFrame,
     lookback_steps: int,
-    feature_columns: List[str],
-    target_columns: List[str],
-    target_date_columns: List[str],
-) -> Dict[str, np.ndarray]:
+    feature_columns: list[str],
+    target_columns: list[str],
+    target_date_columns: list[str],
+) -> dict[str, Any]:
     """Build unscaled sliding-window samples for model training and testing.
 
     Each sample contains a historical input window, its future target value(s),
@@ -239,6 +252,11 @@ def build_sequences(
             f"Cannot build {lookback_steps}-step windows from only {len(df)} rows."
         )
 
+    feature_values = df[feature_columns].to_numpy(dtype=np.float32)
+    target_values = df[target_columns].to_numpy(dtype=np.float32)
+    target_date_values = df[target_date_columns].to_numpy()
+    index_values = df.index.to_numpy()
+
     X, y = [], []
     input_end_dates = []
     target_dates = []
@@ -246,10 +264,10 @@ def build_sequences(
     for end_idx in range(lookback_steps - 1, len(df)):
         start_idx = end_idx - lookback_steps + 1
 
-        X.append(df[feature_columns].iloc[start_idx : end_idx + 1].values)
-        y.append(df[target_columns].iloc[end_idx].values)
-        input_end_dates.append(df.index[end_idx])
-        target_dates.append(df[target_date_columns].iloc[end_idx].values)
+        X.append(feature_values[start_idx : end_idx + 1])
+        y.append(target_values[end_idx])
+        input_end_dates.append(index_values[end_idx])
+        target_dates.append(target_date_values[end_idx])
 
     return {
         "X": np.array(X, dtype=np.float32),
@@ -265,12 +283,12 @@ def build_sequences(
 
 
 def split_sequences(
-    sequence_data: Dict[str, np.ndarray],
+    sequence_data: dict[str, Any],
     split_by_date: bool = True,
     split_ratio: float = 0.8,
-    split_date: Optional[str] = None,
+    split_date: str | None = None,
     shuffle: bool = True,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
     """Split samples into train and test sets.
 
     Chronological splitting uses target dates, so a sample is placed in the test
@@ -342,9 +360,9 @@ def split_sequences_by_target_date(
     y: np.ndarray,
     input_end_dates: np.ndarray,
     target_dates: np.ndarray,
-    split_date: Optional[str],
+    split_date: str | None,
     split_ratio: float,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, Any]:
     """Split time-series samples without leaking test targets into training."""
     if split_date is None:
         train_size = int(split_ratio * len(X))
@@ -392,7 +410,7 @@ def split_sequences_randomly(
     input_end_dates: np.ndarray,
     split_ratio: float,
     shuffle: bool,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, Any]:
     """Split samples randomly for comparison experiments, not live forecasting."""
     indices = np.arange(len(X))
 
@@ -422,7 +440,7 @@ def shuffle_training_samples(
     X_train: np.ndarray,
     y_train: np.ndarray,
     train_input_dates: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Shuffle training arrays while preserving sample alignment."""
     rng = np.random.default_rng(RANDOM_SEED)
     permutation = rng.permutation(len(X_train))
@@ -442,8 +460,8 @@ def shuffle_training_samples(
 def fit_training_scalers(
     X_train: np.ndarray,
     y_train: np.ndarray,
-    feature_columns: List[str],
-) -> Dict[str, MinMaxScaler]:
+    feature_columns: list[str],
+) -> dict[str, MinMaxScaler]:
     """Fit feature scalers using training samples only.
 
     The target scaler is fitted using both historical training values and
@@ -481,9 +499,9 @@ def fit_training_scalers(
 def scale_sequences(
     X: np.ndarray,
     y: np.ndarray,
-    feature_columns: List[str],
-    scalers: Dict[str, MinMaxScaler],
-) -> Tuple[np.ndarray, np.ndarray]:
+    feature_columns: list[str],
+    scalers: dict[str, MinMaxScaler],
+) -> tuple[np.ndarray, np.ndarray]:
     """Scale input windows and targets with training-fitted scalers."""
     X_scaled = X.copy().astype(np.float32)
 
@@ -510,8 +528,8 @@ def scale_sequences(
 
 def scale_last_sequence(
     last_sequence: np.ndarray,
-    feature_columns: List[str],
-    scalers: Dict[str, MinMaxScaler],
+    feature_columns: list[str],
+    scalers: dict[str, MinMaxScaler],
 ) -> np.ndarray:
     """Scale the latest lookback window for future inference."""
     scaled_sequence = last_sequence.copy().astype(np.float32)
@@ -527,11 +545,11 @@ def scale_last_sequence(
 
 
 def save_scalers(
-    scalers: Dict[str, MinMaxScaler],
+    scalers: dict[str, MinMaxScaler],
     ticker: str,
-    output_dir: str,
-    metadata: Dict[str, Any],
-) -> str:
+    output_dir: Path,
+    metadata: dict[str, Any],
+) -> Path:
     """Persist training-fitted scalers and metadata for later inspection.
 
     Args:
@@ -543,21 +561,22 @@ def save_scalers(
     Returns:
         Path to the saved pickle file.
     """
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     safe_ticker = ticker.replace(".", "_")
-    scaler_path = os.path.join(output_dir, f"{safe_ticker}_scalers.pkl")
+    scaler_path = output_dir / f"{safe_ticker}_scalers.pkl"
 
-    with open(scaler_path, "wb") as file:
+    with scaler_path.open("wb") as file:
         pickle.dump(
             {
                 "scalers": scalers,
                 "metadata": metadata,
             },
             file,
+            protocol=pickle.HIGHEST_PROTOCOL,
         )
 
-    print(f"[Scaler Cache] Saved training-fitted scalers to: {scaler_path}")
+    print(f"[Scaler Cache] Saved training-fitted scalers to: {scaler_path.as_posix()}")
 
     return scaler_path
 
@@ -577,13 +596,13 @@ def load_and_process_data(
     forecast_offset: int = 1,
     split_by_date: bool = True,
     split_ratio: float = 0.8,
-    split_date: Optional[str] = None,
-    feature_columns: Optional[List[str]] = None,
-    cache_dir: str = "data",
+    split_date: str | None = None,
+    feature_columns: list[str] | None = None,
+    cache_dir: Path = DATA_DIR,
     future_steps: int = 1,
     save_scaler_cache: bool = True,
-    results_dir: str = "results/c2",
-) -> Dict[str, Any]:
+    output_dir: Path = RESULTS_DIR / "c2",
+) -> dict[str, Any]:
     """Load, clean, split, scale, and package stock data for model pipelines.
 
     This is the public data-processing entry point used by training, testing,
@@ -602,10 +621,10 @@ def load_and_process_data(
         split_ratio: Training fraction used when no explicit split date is given.
         split_date: First target date assigned to the test set.
         feature_columns: Input feature names. Defaults to OHLCV-style features.
-        cache_dir: Directory for raw CSV cache and scaler cache.
+        cache_dir: Directory for raw stock CSV cache.
         future_steps: Number of future target prices per sample.
         save_scaler_cache: Save fitted scalers to disk when scaling is enabled.
-        results_dir: Directory for generated Task C.2 preprocessing artefacts,
+        output_dir: Directory for generated Task C.2 preprocessing artefacts,
             including fitted scaler files.
 
     Returns:
@@ -613,7 +632,13 @@ def load_and_process_data(
         date mappings, the cleaned dataframe, and the test dataframe.
     """
     if feature_columns is None:
-        feature_columns = DEFAULT_FEATURE_COLUMNS.copy()
+        feature_columns = FEATURE_COLUMNS.copy()
+
+    if TARGET_COLUMN not in feature_columns:
+        raise ValueError(
+            f"'{TARGET_COLUMN}' must be included in feature_columns because "
+            "it is used as the prediction target."
+        )
 
     # --------------------------------------------------------------------------
     # Phase 1: Load and clean raw market data
@@ -716,7 +741,7 @@ def load_and_process_data(
             result["scaler_path"] = save_scalers(
                 scalers=column_scaler,
                 ticker=ticker,
-                output_dir=results_dir,
+                output_dir=output_dir,
                 metadata={
                     "ticker": ticker,
                     "start_date": start_date,
@@ -746,10 +771,10 @@ def load_and_process_data(
     # --------------------------------------------------------------------------
     result.update(
         {
-            "X_train": X_train.astype(np.float32),
-            "y_train": y_train.astype(np.float32),
-            "X_test": X_test.astype(np.float32),
-            "y_test": y_test.astype(np.float32),
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_test": X_test,
+            "y_test": y_test,
             "test_df": test_df,
             "last_sequence": last_sequence.astype(np.float32),
             "target_columns": target_columns,
@@ -764,3 +789,38 @@ def load_and_process_data(
     print(f"[Data Pipeline] y_test:  {result['y_test'].shape}")
 
     return result
+
+
+# ==============================================================================
+# STANDALONE EXECUTION ENTRY POINT
+# ==============================================================================
+
+if __name__ == "__main__":
+    print("=" * 80)
+    print("STARTING TASK C.2 DATA PROCESSING PIPELINE")
+    print("=" * 80)
+
+    processed_data = load_and_process_data(
+        ticker=TICKER,
+        start_date=START_DATE,
+        end_date=END_DATE,
+        lookback_steps=LOOKBACK_STEPS,
+        scale=True,
+        shuffle=True,
+        forecast_offset=FORECAST_OFFSET,
+        split_by_date=True,
+        split_date=SPLIT_DATE,
+        feature_columns=FEATURE_COLUMNS,
+        cache_dir=DATA_DIR,
+        future_steps=FUTURE_STEPS,
+        save_scaler_cache=True,
+        output_dir=RESULTS_DIR / "c2",
+    )
+
+    scaler_path = processed_data.get("scaler_path")
+
+    print("=" * 80)
+    print("TASK C.2 DATA PROCESSING COMPLETED")
+    if scaler_path is not None:
+        print(f"Scaler artefact: {Path(scaler_path).as_posix()}")
+    print("=" * 80)

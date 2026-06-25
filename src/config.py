@@ -1,8 +1,10 @@
 # ================================================================
-# Purpose: 
+# Purpose:
 # Global configurations, feature settings, and experiment sweep
 # parameters for FinTech101 stock forecasting.
 # ================================================================
+
+from pathlib import Path
 
 # ==============================================================================
 # GLOBAL DATA & PREPROCESSING CONFIGURATIONS
@@ -13,17 +15,22 @@ END_DATE = "2024-07-02"
 SPLIT_DATE = "2023-08-02"  # Chronological split boundary date (train ends 2023-08-01, test starts 2023-08-02)
 
 # ----- Sliding Window Parameters -----
-LOOKBACK_STEPS = 50       # Lookback sequence window size (days)
-FORECAST_OFFSET = 1       # Days ahead to start forecast (offset)
-FUTURE_STEPS = 1          # Number of future steps/days to predict
+LOOKBACK_STEPS = 50  # Lookback sequence window size (days)
+FORECAST_OFFSET = 1  # Days ahead to start forecast (offset)
+FUTURE_STEPS = 1  # Number of future steps/days to predict
 
 # ----- Feature Definition -----
-FEATURE_COLUMNS = ['adjclose', 'volume', 'open', 'high', 'low']
+FEATURE_COLUMNS = ["adjclose", "volume", "open", "high", "low"]
+
+# ----- Experiment Sweep Directories -----
+DATA_DIR = Path("data")
+RESULTS_DIR = Path("results")
+CSV_RESULTS_DIR = Path("csv-results")
 
 # ==============================================================================
 # TASK C.4 HYPERPARAMETER EXPERIMENT CONFIGURATIONS
 # ==============================================================================
-SWEEP_CONFIGS = {
+C4_SWEEP_CONFIGS = {
     # ---- Cell Type Comparison ----
     "LSTM_BASE": {
         "cell_type": "LSTM",
@@ -32,7 +39,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Base LSTM — Standard 2-layer LSTM control benchmark"
+        "description": "Base LSTM — Standard 2-layer LSTM control benchmark",
     },
     "GRU_BASE": {
         "cell_type": "GRU",
@@ -41,7 +48,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Base GRU — GRU cell vs LSTM (parameter efficiency, no separate cell state)"
+        "description": "Base GRU — GRU cell vs LSTM (parameter efficiency, no separate cell state)",
     },
     "RNN_BASE": {
         "cell_type": "SimpleRNN",
@@ -50,7 +57,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Base RNN — Vanilla RNN, tests vanishing gradient on 50-day windows"
+        "description": "Base RNN — Vanilla RNN, tests vanishing gradient on 50-day windows",
     },
     # ---- Depth Comparison ----
     "LSTM_STACKED": {
@@ -60,7 +67,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Stacked LSTM — Deep 3-layer representational capacity vs overfitting"
+        "description": "Stacked LSTM — Deep 3-layer representational capacity vs overfitting",
     },
     "LSTM_SHALLOW": {
         "cell_type": "LSTM",
@@ -69,7 +76,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Shallow LSTM — Minimal 1-layer model (Occam's Razor regularizer)"
+        "description": "Shallow LSTM — Minimal 1-layer model (Occam's Razor regularizer)",
     },
     # ---- Width Comparison ----
     "LSTM_WIDE": {
@@ -79,7 +86,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Wide LSTM — 256-unit state capacity expansion vs overfitting noise"
+        "description": "Wide LSTM — 256-unit state capacity expansion vs overfitting noise",
     },
     "LSTM_NARROW": {
         "cell_type": "LSTM",
@@ -88,7 +95,7 @@ SWEEP_CONFIGS = {
         "loss": "huber",
         "epochs": 20,
         "batch_size": 64,
-        "description": "Narrow LSTM — 64-unit bottleneck compression as regularizer"
+        "description": "Narrow LSTM — 64-unit bottleneck compression as regularizer",
     },
     # ---- Loss Function Comparison ----
     "LSTM_MSE": {
@@ -98,6 +105,42 @@ SWEEP_CONFIGS = {
         "loss": "mse",
         "epochs": 20,
         "batch_size": 64,
-        "description": "LSTM MSE Loss — Outlier-sensitive quadratic loss vs robust Huber baseline"
-    }
+        "description": "LSTM MSE Loss — Outlier-sensitive quadratic loss vs robust Huber baseline",
+    },
+}
+
+# ==============================================================================
+# TASK C.5 MULTIVARIATE & MULTISTEP EXPERIMENT CONFIGURATIONS
+# ==============================================================================
+C5_SWEEP_CONFIGS = {
+    "lstm_uni_multistep": {
+        "description": "Univariate Multistep (Close Only -> 5 Days Forecast)",
+        "feature_columns": ["adjclose"],
+        "future_steps": 5,
+        "epochs": 20,
+        "batch_size": 64,
+        "units": 128,
+        "n_layers": 2,
+        "cell_type": "LSTM",
+    },
+    "lstm_multi_singlestep": {
+        "description": "Multivariate Single-Step (All Features -> 1 Day Forecast)",
+        "feature_columns": FEATURE_COLUMNS,
+        "future_steps": 1,
+        "epochs": 20,
+        "batch_size": 64,
+        "units": 128,
+        "n_layers": 2,
+        "cell_type": "LSTM",
+    },
+    "lstm_multi_multistep": {
+        "description": "Multivariate Multistep Combined (All Features -> 5 Days Forecast)",
+        "feature_columns": FEATURE_COLUMNS,
+        "future_steps": 5,
+        "epochs": 20,
+        "batch_size": 64,
+        "units": 128,
+        "n_layers": 2,
+        "cell_type": "LSTM",
+    },
 }

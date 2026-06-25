@@ -1,30 +1,54 @@
 # ==============================================================================
-# Purpose: 
-# C.4 Deep Learning hyperparameter experiment sweep orchestrator.
+# Purpose:
+# C.4 deep learning hyperparameter experiment sweep orchestrator.
 # ==============================================================================
 
-from config import SWEEP_CONFIGS, TICKER, START_DATE, END_DATE, SPLIT_DATE
+from typing import Any
+
 from base_sweep import BaseSweepRunner
+from config import (
+    C4_SWEEP_CONFIGS,
+    END_DATE,
+    RESULTS_DIR,
+    SPLIT_DATE,
+    START_DATE,
+    TICKER,
+)
+
+
+# ==============================================================================
+# TASK C.4 SWEEP RUNNER
+# ==============================================================================
 
 
 class C4SweepRunner(BaseSweepRunner):
-    """
-    Orchestrator class for Task C.4 experiment sweeps.
-    Compares recurrent cell types, model depths, model widths, and loss formulations.
-    """
+    """Run Task C.4 sweeps for recurrent cell, depth, width, and loss variants."""
 
-    def __init__(self, ticker, start_date, end_date, split_date, dropout=0.3):
-        """
-        Initializes the C4 sweep runner.
-        """
-        super().__init__(ticker, start_date, end_date, split_date, dropout)
-        self.subfolder = "c4"
+    def __init__(
+        self,
+        ticker: str,
+        start_date: str,
+        end_date: str,
+        split_date: str,
+        dropout: float = 0.3,
+    ) -> None:
+        """Initialise the C.4 sweep runner with shared experiment settings."""
+        super().__init__(
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+            split_date=split_date,
+            dropout=dropout,
+            subfolder="c4",
+        )
 
-    def format_results_row(self, config_id, config_params, test_results):
-        """
-        Formats C4 configuration parameters and test metrics into a row matching
-        the C4 report structure.
-        """
+    def format_results_row(
+        self,
+        config_id: str,
+        config_params: dict[str, Any],
+        test_results: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Format one C.4 sweep result row for the report-ready CSV."""
         return {
             "Model Name": config_id,
             "Cell Type": config_params["cell_type"],
@@ -39,7 +63,7 @@ class C4SweepRunner(BaseSweepRunner):
             "Directional Acc (%)": round(test_results["DA"], 2),
             "Trading Acc (%)": round(test_results["trading_accuracy"], 2),
             "Total Trading Profit ($)": round(test_results["total_profit"], 2),
-            "Profit per Trade ($)": round(test_results["profit_per_trade"], 2)
+            "Profit per Trade ($)": round(test_results["profit_per_trade"], 2),
         }
 
 
@@ -47,20 +71,20 @@ class C4SweepRunner(BaseSweepRunner):
 # MAIN RUNNER EXECUTION
 # ==============================================================================
 
-def run_c4_sweeps():
-    """
-    Main entry point for running Task C.4 hyperparameter sweeps.
-    """
+
+def run_c4_sweeps() -> None:
+    """Run all Task C.4 hyperparameter sweeps and save consolidated results."""
     runner = C4SweepRunner(
         ticker=TICKER,
         start_date=START_DATE,
         end_date=END_DATE,
         split_date=SPLIT_DATE,
-        dropout=0.3
+        dropout=0.3,
     )
+
     runner.run_sweep(
-        configs=SWEEP_CONFIGS,
-        output_csv_path="results/c4/c4_sweep_results.csv"
+        configs=C4_SWEEP_CONFIGS,
+        output_csv_path=RESULTS_DIR / "c4" / "c4_sweep_results.csv",
     )
 
 

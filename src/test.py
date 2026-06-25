@@ -1,70 +1,85 @@
 # ==============================================================================
-# Purpose: 
+# Purpose:
 # Deep learning model evaluation, metric calculations (correctly unscaled),
 # and professional visualization.
 # ==============================================================================
 
-import os
-import random
+from pathlib import Path
 import argparse
+
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+
 import matplotlib
-matplotlib.use('Agg')  # Headless plotting backend
+
+matplotlib.use("Agg")  # Headless plotting backend
 import matplotlib.pyplot as plt
 
 # Import local data processing and model factory modules
 from data_processing import load_and_process_data
 from model_factory import build_dl_model
-
-# ==============================================================================
-# SEED DETERMINISM SETUP
-# ==============================================================================
-
-def set_seed(seed=314):
-    """Enforces random seed determinism across standard runtime environments."""
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-
-set_seed(314)
+from utils.experiment_utils import (
+    add_model_arguments,
+    parse_feature_columns,
+    set_seed,
+)
+from config import (
+    RESULTS_DIR,
+    DATA_DIR,
+    CSV_RESULTS_DIR,
+    TICKER,
+    START_DATE,
+    END_DATE,
+    SPLIT_DATE,
+    LOOKBACK_STEPS,
+    FORECAST_OFFSET,
+    FUTURE_STEPS,
+    FEATURE_COLUMNS,
+)
 
 # ==============================================================================
 # EVALUATION & METRIC CALCULATION FUNCTIONS
 # ==============================================================================
 
-def calculate_metrics(y_true, y_pred, prev_actual, future_steps=1):
+
+def calculate_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    prev_actual: np.ndarray,
+    future_steps: int = FUTURE_STEPS,
+) -> dict[str, float]:
     """
     Computes regression and classification metrics on unscaled stock prices.
-    
+
     Args:
-        y_true (np.array): Unscaled ground truth adjusted close prices.
-        y_pred (np.array): Unscaled predicted adjusted close prices.
-        prev_actual (np.array): Unscaled ground truth close prices for day t.
-        future_steps (int): Forecast sequence horizon length.
-        
+        y_true: Unscaled ground truth adjusted close prices.
+        y_pred: Unscaled predicted adjusted close prices.
+        prev_actual: Unscaled ground truth close prices for day t.
+        future_steps: Forecast sequence horizon length.
+
     Returns:
-        dict: Standard evaluation metrics (MAE, RMSE, MAPE, Directional Accuracy).
+        Standard evaluation metrics (MAE, RMSE, MAPE, Directional Accuracy).
     """
     # Ensure 2D arrays of shape (N, future_steps)
-    y_true = np.atleast_2d(y_true)
-    y_pred = np.atleast_2d(y_pred)
-    if y_true.shape[0] == 1 and len(y_true[0]) > future_steps:
-        y_true = y_true.T
-        y_pred = y_pred.T
-        
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    if y_true.ndim == 1:
+        y_true = y_true.reshape(-1, 1)
+
+    if y_pred.ndim == 1:
+        y_pred = y_pred.reshape(-1, 1)
+
     # Mean Absolute Error (MAE)
     mae = np.mean(np.abs(y_true - y_pred))
-    
+
     # Root Mean Squared Error (RMSE)
     rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
-    
+
     # Mean Absolute Percentage Error (MAPE)
     safe_y_true = np.where(y_true == 0, 1e-5, y_true)
     mape = np.mean(np.abs((y_true - y_pred) / safe_y_true)) * 100
-    
+
     # Directional Accuracy (DA)
     if future_steps > 1:
         # Broadcast prev_actual of shape (N,) to (N, future_steps)
@@ -77,30 +92,43 @@ def calculate_metrics(y_true, y_pred, prev_actual, future_steps=1):
         y_pred_1d = np.squeeze(y_pred)
         actual_dir = np.sign(y_true_1d - prev_actual)
         pred_dir = np.sign(y_pred_1d - prev_actual)
-        
+
     valid_mask = actual_dir != 0
     if np.sum(valid_mask) > 0:
         da = np.mean(actual_dir[valid_mask] == pred_dir[valid_mask]) * 100
     else:
         da = 0.0
-        
+
     return {
         "MAE": float(mae),
         "RMSE": float(rmse),
         "MAPE": float(mape),
-        "DA": float(da)
+        "DA": float(da),
     }
+
 
 # ------------------------------------------------------------------------------
 # TRADING PROFIT CALCULATIONS
 # ------------------------------------------------------------------------------
 
-def get_trading_profits(final_df, forecast_offset, future_steps=1):
+
+def get_trading_profits(
+    final_df: pd.DataFrame, forecast_offset: int, future_steps: int = FUTURE_STEPS
+) -> dict[str, float]:
     """
     Simulates trading profits based on predicted price changes.
-    
+
     If predicted future price is higher than current price, buy.
     If predicted future price is lower than current price, sell.
+
+    Args:
+        final_df: DataFrame containing actual and predicted prices.
+        forecast_offset: Number of days ahead for the forecast.
+        future_steps: Forecast sequence horizon length.
+
+    Returns:
+        Dictionary containing total buy/sell profits, total profit,
+        profit per trade, and trading accuracy.
     """
     if future_steps > 1:
         # Use step 0 of the forecast sequence (which corresponds to t + forecast_offset)
@@ -109,123 +137,217 @@ def get_trading_profits(final_df, forecast_offset, future_steps=1):
     else:
         y_pred_col = f"adjclose_{forecast_offset}"
         y_true_col = f"true_adjclose_{forecast_offset}"
-    
-    # Lambda functions to compute trade profits
-    buy_profit  = lambda current, pred, true: true - current if pred > current else 0.0
-    sell_profit = lambda current, pred, true: current - true if pred < current else 0.0
-    
-    final_df["buy_profit"] = list(map(
-        buy_profit,
-        final_df["adjclose"],
-        final_df[y_pred_col],
-        final_df[y_true_col]
-    ))
-    
-    final_df["sell_profit"] = list(map(
-        sell_profit,
-        final_df["adjclose"],
-        final_df[y_pred_col],
-        final_df[y_true_col]
-    ))
-    
+
+    current_prices = final_df["adjclose"].to_numpy()
+    predicted_prices = final_df[y_pred_col].to_numpy()
+    true_prices = final_df[y_true_col].to_numpy()
+
+    buy_profit = np.where(
+        predicted_prices > current_prices,
+        true_prices - current_prices,
+        0.0,
+    )
+
+    sell_profit = np.where(
+        predicted_prices < current_prices,
+        current_prices - true_prices,
+        0.0,
+    )
+
+    final_df["buy_profit"] = buy_profit
+    final_df["sell_profit"] = sell_profit
+
     total_buy = final_df["buy_profit"].sum()
     total_sell = final_df["sell_profit"].sum()
     total_profit = total_buy + total_sell
-    
+
     n_trades = len(final_df)
     profit_per_trade = total_profit / n_trades if n_trades > 0 else 0.0
-    
+
     # Trading accuracy: fraction of trades that yielded a positive profit
-    profitable_trades = (final_df["buy_profit"] > 0).sum() + (final_df["sell_profit"] > 0).sum()
+    profitable_trades = (final_df["buy_profit"] > 0).sum() + (
+        final_df["sell_profit"] > 0
+    ).sum()
     trading_accuracy = (profitable_trades / n_trades) * 100 if n_trades > 0 else 0.0
-    
+
     return {
         "total_buy_profit": float(total_buy),
         "total_sell_profit": float(total_sell),
         "total_profit": float(total_profit),
         "profit_per_trade": float(profit_per_trade),
-        "trading_accuracy": float(trading_accuracy)
+        "trading_accuracy": float(trading_accuracy),
     }
+
 
 # ==============================================================================
 # VISUALIZATION PIPELINE
 # ==============================================================================
 
-def plot_prediction_chart(final_df, forecast_offset, model_name, subfolder="", future_steps=1):
+
+def plot_prediction_chart(
+    final_df: pd.DataFrame,
+    forecast_offset: int,
+    model_name: str,
+    subfolder: str = "",
+    future_steps: int = 1,
+    results_dir: Path = RESULTS_DIR,
+) -> None:
     """
     Saves a high-quality visualization comparing actual and predicted prices.
+
+    Args:
+        final_df: DataFrame containing actual and predicted prices.
+        forecast_offset: Number of days ahead for the forecast.
+        model_name: Name of the model for labeling the plot.
+        subfolder: Optional subfolder for saving the plot.
+        future_steps: Forecast sequence horizon length.
+
+    Returns:
+        None. Saves the plot to disk.
     """
-    plt.figure(figsize=(12, 6))
-    
+    fig, ax = plt.subplots(figsize=(12, 6))
+
     if future_steps > 1:
         # Plot step 0 of the forecast sequence (the next immediate day)
-        plt.plot(final_df.index, final_df['true_adjclose_future_0'], label="Actual Price", color="#1f77b4", linewidth=2)
-        plt.plot(final_df.index, final_df['adjclose_future_0'], label="Predicted Price (t+1)", color="#ff7f0e", linestyle="--", linewidth=2)
+        ax.plot(
+            final_df.index,
+            final_df["true_adjclose_future_0"],
+            label="Actual Price",
+            color="#1f77b4",
+            linewidth=2,
+        )
+        ax.plot(
+            final_df.index,
+            final_df["adjclose_future_0"],
+            label="Predicted Price (t+1)",
+            color="#ff7f0e",
+            linestyle="--",
+            linewidth=2,
+        )
         title_suffix = f" (Multi-Step: {future_steps} Days, showing Step 1)"
     else:
-        plt.plot(final_df.index, final_df[f'true_adjclose_{forecast_offset}'], label="Actual Price", color="#1f77b4", linewidth=2)
-        plt.plot(final_df.index, final_df[f'adjclose_{forecast_offset}'], label="Predicted Price", color="#ff7f0e", linestyle="--", linewidth=2)
+        ax.plot(
+            final_df.index,
+            final_df[f"true_adjclose_{forecast_offset}"],
+            label="Actual Price",
+            color="#1f77b4",
+            linewidth=2,
+        )
+        ax.plot(
+            final_df.index,
+            final_df[f"adjclose_{forecast_offset}"],
+            label="Predicted Price",
+            color="#ff7f0e",
+            linestyle="--",
+            linewidth=2,
+        )
         title_suffix = f" (Forecast Offset: {forecast_offset} Days)"
-    
-    plt.title(f"Stock Price Prediction Comparison - {model_name}{title_suffix}", fontsize=14, fontweight="bold", pad=15)
-    plt.xlabel("Date", fontsize=12, labelpad=10)
-    plt.ylabel("Unscaled Price ($)", fontsize=12, labelpad=10)
-    
+
+    ax.set_title(
+        f"Stock Price Prediction Comparison - {model_name}{title_suffix}",
+        fontsize=14,
+        fontweight="bold",
+        pad=15,
+    )
+    ax.set_xlabel("Date", fontsize=12, labelpad=10)
+    ax.set_ylabel("Unscaled Price ($)", fontsize=12, labelpad=10)
+
     # Modern styling
-    plt.grid(True, linestyle=":", alpha=0.6)
-    plt.legend(loc="upper left", fontsize=11, frameon=True, facecolor="white", edgecolor="none")
-    plt.xticks(rotation=45)
+    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.legend(
+        loc="upper left", fontsize=11, frameon=True, facecolor="white", edgecolor="none"
+    )
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
     # Save Plot
-    results_dir = os.path.join("results", subfolder) if subfolder else "results"
-    plot_path = os.path.join(results_dir, f"{model_name}_prediction.png")
-    os.makedirs(os.path.dirname(plot_path), exist_ok=True)
-    
-    # Explicitly remove existing plot to ensure a clean overwrite
-    if os.path.exists(plot_path):
-        os.remove(plot_path)
-        print(f"[Test Pipeline] Overwriting existing prediction plot at: {plot_path}")
-        
-    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
-    plt.close()
-    
-    print(f"[Visualization] Saved prediction plot to: {plot_path}")
+    results_dir = results_dir / subfolder if subfolder else results_dir
+    plot_path = results_dir / f"{model_name}_prediction.png"
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Matplotlib overwrites the existing file; this message makes reruns explicit.
+    if plot_path.exists():
+        print(
+            f"[Test Pipeline] Overwriting existing prediction plot at: {plot_path.as_posix()}"
+        )
+
+    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"[Visualization] Saved prediction plot to: {plot_path.as_posix()}")
+
+
+# ==============================================================================
+# HELPER FUNCTIONS FOR TESTING PIPELINE
+# ==============================================================================
+def print_evaluation_summary(
+    model_name: str,
+    metrics: dict[str, float],
+    trading_metrics: dict[str, float],
+) -> None:
+    """Print evaluation and trading results in a consistent terminal format."""
+    print("\n" + "=" * 50)
+    print(f" EVALUATION RESULTS - {model_name} ")
+    print("=" * 50)
+    print(f"Unscaled MAE:           ${metrics['MAE']:.4f}")
+    print(f"Unscaled RMSE:          ${metrics['RMSE']:.4f}")
+    print(f"Unscaled MAPE:          {metrics['MAPE']:.2f}%")
+    print(f"Directional Accuracy:   {metrics['DA']:.2f}%")
+    print(f"Trading Accuracy:       {trading_metrics['trading_accuracy']:.2f}%")
+    print(f"Total Trading Profit:   ${trading_metrics['total_profit']:.2f}")
+    print(f"Profit per Trade:       ${trading_metrics['profit_per_trade']:.2f}")
+    print("=" * 50)
+
 
 # ==============================================================================
 # TESTING PIPELINE
 # ==============================================================================
 
+
 def test_model(
-    ticker="CBA.AX",
-    start_date="2020-01-01",
-    end_date="2024-07-02",
-    split_date="2023-08-02",
-    lookback_steps=50,
-    forecast_offset=1,
-    scale=True,
-    feature_columns=['adjclose', 'volume', 'open', 'high', 'low'],
-    units=128,
-    cell_type="LSTM",
-    n_layers=2,
-    dropout=0.3,
-    loss="huber",
-    optimizer="adam",
-    bidirectional=False,
-    model_name="lstm_model",
-    subfolder="",
-    future_steps=1
-):
+    ticker: str = TICKER,
+    start_date: str = START_DATE,
+    end_date: str = END_DATE,
+    split_date: str = SPLIT_DATE,
+    lookback_steps: int = LOOKBACK_STEPS,
+    forecast_offset: int = FORECAST_OFFSET,
+    scale: bool = True,
+    feature_columns: list[str] | None = None,
+    units: int = 128,
+    cell_type: str = "LSTM",
+    n_layers: int = 2,
+    dropout: float = 0.3,
+    loss: str = "huber",
+    optimizer: str = "adam",
+    bidirectional: bool = False,
+    model_name: str = "lstm_model",
+    subfolder: str = "",
+    future_steps: int = FUTURE_STEPS,
+    results_dir: Path = RESULTS_DIR,
+    csv_results_dir: Path = CSV_RESULTS_DIR,
+) -> dict[str, float]:
     """
     Evaluates a trained model: loads weights, runs inference, inverts scaling,
     computes accurate metrics, runs trading simulations, and saves plots and CSV logs.
-    
+
     Returns:
         dict: Evaluation metrics and trading performance dictionary.
     """
+    if feature_columns is None:
+        feature_columns = FEATURE_COLUMNS
+
+    if future_steps < 1:
+        raise ValueError("future_steps must be at least 1.")
+
+    if lookback_steps < 1:
+        raise ValueError("lookback_steps must be at least 1.")
+
+    if forecast_offset < 1:
+        raise ValueError("forecast_offset must be at least 1.")
+
     # --------------------------------------------------------------------------
     # Step 1: Enforce Determinism & Load Data
     # --------------------------------------------------------------------------
     set_seed(314)
-    
+
     data = load_and_process_data(
         ticker=ticker,
         start_date=start_date,
@@ -237,13 +359,13 @@ def test_model(
         split_by_date=True,
         split_date=split_date,
         feature_columns=feature_columns,
-        cache_dir="data",
-        future_steps=future_steps
+        cache_dir=DATA_DIR,
+        future_steps=future_steps,
     )
-    
+
     X_test = data["X_test"]
     y_test = data["y_test"]
-    
+
     # --------------------------------------------------------------------------
     # Step 2: Build Model and Load Weights
     # --------------------------------------------------------------------------
@@ -258,36 +380,44 @@ def test_model(
         loss=loss,
         optimizer=optimizer,
         bidirectional=bidirectional,
-        future_steps=future_steps
+        future_steps=future_steps,
     )
-    
-    weights_dir = os.path.join("results", subfolder) if subfolder else "results"
-    weights_path = os.path.join(weights_dir, f"{model_name}.weights.h5")
-    if not os.path.exists(weights_path):
-        raise FileNotFoundError(f"Trained model weights not found at: {weights_path}")
-        
+
+    weights_dir = results_dir / subfolder if subfolder else results_dir
+    weights_path = weights_dir / f"{model_name}.weights.h5"
+    if not weights_path.exists():
+        raise FileNotFoundError(
+            f"Trained model weights not found at: {weights_path.as_posix()}"
+        )
+
     model.load_weights(weights_path)
-    print(f"[Test Pipeline] Loaded trained model weights from: {weights_path}")
-    
+    print(
+        f"[Test Pipeline] Loaded trained model weights from: {weights_path.as_posix()}"
+    )
+
     # --------------------------------------------------------------------------
     # Step 3: Run Inference & Inverse Transform Scaling
     # --------------------------------------------------------------------------
     print(f"[Test Pipeline] Running inference on {len(X_test)} samples...")
     y_pred = model.predict(X_test, verbose=0)
-    
+
     # Correct unscaling of predictions and targets
     if scale:
         scaler = data["column_scaler"]["adjclose"]
-        y_test_unscaled = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(y_test.shape)
-        y_pred_unscaled = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(y_pred.shape)
+        y_test_unscaled = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(
+            y_test.shape
+        )
+        y_pred_unscaled = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(
+            y_pred.shape
+        )
     else:
         y_test_unscaled = y_test
         y_pred_unscaled = y_pred
-        
+
     # Get previous day's actual price to calculate direction
     test_df = data["test_df"].copy()
     test_df.sort_index(inplace=True)
-    
+
     # Align shapes and insert into test dataframe
     if future_steps > 1:
         for i in range(future_steps):
@@ -298,78 +428,82 @@ def test_model(
         y_pred_unscaled_1d = np.squeeze(y_pred_unscaled)
         test_df[f"adjclose_{forecast_offset}"] = y_pred_unscaled_1d
         test_df[f"true_adjclose_{forecast_offset}"] = y_test_unscaled_1d
-    
+
     # Previous day's price is the raw 'adjclose' (which is index-aligned)
     prev_actual = test_df["adjclose"].values
-    
+
     # --------------------------------------------------------------------------
     # Step 4: Calculate Metrics (Correctly Unscaled)
     # --------------------------------------------------------------------------
-    metrics = calculate_metrics(y_test_unscaled, y_pred_unscaled, prev_actual, future_steps=future_steps)
-    
+    metrics = calculate_metrics(
+        y_test_unscaled, y_pred_unscaled, prev_actual, future_steps=future_steps
+    )
+
     # Get trading simulation profit metrics
-    trading_metrics = get_trading_profits(test_df, forecast_offset, future_steps=future_steps)
-    
-    print("\n" + "="*50)
-    print(f" EVALUATION RESULTS - {model_name} ")
-    print("="*50)
-    print(f"Unscaled MAE:           ${metrics['MAE']:.4f}")
-    print(f"Unscaled RMSE:          ${metrics['RMSE']:.4f}")
-    print(f"Unscaled MAPE:          {metrics['MAPE']:.2f}%")
-    print(f"Directional Accuracy:   {metrics['DA']:.2f}%")
-    print(f"Trading Accuracy:       {trading_metrics['trading_accuracy']:.2f}%")
-    print(f"Total Trading Profit:   ${trading_metrics['total_profit']:.2f}")
-    print(f"Profit per Trade:       ${trading_metrics['profit_per_trade']:.2f}")
-    print("="*50)
-    
+    trading_metrics = get_trading_profits(
+        test_df, forecast_offset, future_steps=future_steps
+    )
+
+    print_evaluation_summary(
+        model_name=model_name,
+        metrics=metrics,
+        trading_metrics=trading_metrics,
+    )
+
     # --------------------------------------------------------------------------
     # Step 5: Save Plots and CSV Logs
     # --------------------------------------------------------------------------
-    plot_prediction_chart(test_df, forecast_offset, model_name, subfolder=subfolder, future_steps=future_steps)
-    
-    csv_results_folder = os.path.join("csv-results", subfolder) if subfolder else "csv-results"
-    csv_path = os.path.join(csv_results_folder, f"{model_name}.csv")
-    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    
-    # Explicitly remove existing CSV to ensure a clean overwrite
-    if os.path.exists(csv_path):
-        os.remove(csv_path)
-        print(f"[Test Pipeline] Overwriting existing CSV results at: {csv_path}")
-        
+    plot_prediction_chart(
+        final_df=test_df,
+        forecast_offset=forecast_offset,
+        model_name=model_name,
+        subfolder=subfolder,
+        future_steps=future_steps,
+        results_dir=results_dir,
+    )
+
+    csv_results_folder = csv_results_dir / subfolder if subfolder else csv_results_dir
+    csv_path = csv_results_folder / f"{model_name}.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # pandas overwrites the existing CSV; this message makes reruns explicit.
+    if csv_path.exists():
+        print(
+            f"[Test Pipeline] Overwriting existing CSV results at: {csv_path.as_posix()}"
+        )
+
     test_df.to_csv(csv_path)
-    print(f"[Test Pipeline] Saved detailed predictions CSV to: {csv_path}")
-    
+    print(f"[Test Pipeline] Saved detailed predictions CSV to: {csv_path.as_posix()}")
+
     # Combine results
     all_results = {**metrics, **trading_metrics}
-    
+
     # Return metrics
     return all_results
+
+
+# ==============================================================================
+# COMMAND-LINE INTERFACE
+# ==============================================================================
+
+
+def create_arg_parser() -> argparse.ArgumentParser:
+    """Create the command-line parser for the testing script."""
+    parser = argparse.ArgumentParser(
+        description="Evaluate deep recurrent stock prediction models."
+    )
+    add_model_arguments(parser)
+    return parser
+
 
 # ==============================================================================
 # ENTRY POINT
 # ==============================================================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate deep recurrent stock prediction models.")
-    
-    parser.add_argument("--ticker", type=str, default="CBA.AX", help="Stock ticker symbol.")
-    parser.add_argument("--cell_type", type=str, default="LSTM", help="Recurrent cell type (LSTM, GRU, SimpleRNN).")
-    parser.add_argument("--n_layers", type=int, default=2, help="Number of recurrent layers.")
-    parser.add_argument("--units", type=int, default=128, help="Number of recurrent hidden units.")
-    parser.add_argument("--dropout", type=float, default=0.3, help="Dropout rate.")
-    parser.add_argument("--loss", type=str, default="huber", help="Loss function (huber, mse, mae).")
-    parser.add_argument("--model_name", type=str, default="lstm_model", help="Name of model weights file.")
-    parser.add_argument("--subfolder", type=str, default="", help="Subfolder within results directory.")
-    parser.add_argument("--bidirectional", action="store_true", help="Wrap recurrent layers in Bidirectional wrapper.")
-    parser.add_argument("--lookback_steps", type=int, default=50, help="Number of past time steps to look back.")
-    parser.add_argument("--forecast_offset", type=int, default=1, help="Offset to start forecast ahead.")
-    parser.add_argument("--future_steps", type=int, default=1, help="Number of future steps to predict.")
-    parser.add_argument("--feature_columns", type=str, default="adjclose,volume,open,high,low", help="Comma-separated feature list.")
-    
+    parser = create_arg_parser()
     args = parser.parse_args()
-    
-    feature_list = [f.strip() for f in args.feature_columns.split(",") if f.strip()]
-    
+
     test_model(
         ticker=args.ticker,
         cell_type=args.cell_type,
@@ -383,5 +517,5 @@ if __name__ == "__main__":
         lookback_steps=args.lookback_steps,
         forecast_offset=args.forecast_offset,
         future_steps=args.future_steps,
-        feature_columns=feature_list
+        feature_columns=parse_feature_columns(args.feature_columns),
     )

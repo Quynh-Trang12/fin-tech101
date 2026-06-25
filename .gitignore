@@ -9,9 +9,6 @@ data/*
 csv-results/*.csv
 csv-results/c*/*.csv
 
-*.h5
-*.keras
-*.pkl
 *.joblib
 
 docs/*

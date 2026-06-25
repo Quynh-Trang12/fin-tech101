@@ -1,5 +1,5 @@
 # ==============================================================================
-# Purpose: 
+# Purpose:
 # Dynamic construction of Deep Learning models (LSTM, GRU, SimpleRNN)
 # for financial time-series prediction.
 # ==============================================================================
@@ -7,109 +7,132 @@
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, GRU, SimpleRNN, Dense, Dropout, Bidirectional
+from config import FUTURE_STEPS
+
+# ==============================================================================
+# CONSTANTS
+# ==============================================================================
+CELL_TYPES = {
+    "LSTM": LSTM,
+    "GRU": GRU,
+    "SIMPLERNN": SimpleRNN,
+    "RNN": SimpleRNN,
+}
+
+
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+def validate_positive_integer(name: str, value: int) -> None:
+    """Validate that a model hyperparameter is a positive integer."""
+    if value < 1:
+        raise ValueError(f"{name} must be at least 1.")
+
+
+def validate_dropout(dropout: float) -> None:
+    """Validate dropout as a probability-like rate."""
+    if not 0.0 <= dropout < 1.0:
+        raise ValueError("dropout must be between 0.0 and 1.0.")
+
 
 # ==============================================================================
 # DYNAMIC MODEL BUILDER
 # ==============================================================================
 
+
 def build_dl_model(
-    lookback_steps,
-    n_features,
-    units=128,
-    cell_type="LSTM",
-    n_layers=2,
-    dropout=0.3,
-    loss="huber",
-    optimizer="adam",
-    bidirectional=False,
-    future_steps=1
-):
+    lookback_steps: int,
+    n_features: int,
+    units: int = 128,
+    cell_type: str = "LSTM",
+    n_layers: int = 2,
+    dropout: float = 0.3,
+    loss: str = "huber",
+    optimizer: str = "adam",
+    bidirectional: bool = False,
+    future_steps: int = FUTURE_STEPS,
+) -> tf.keras.Model:
     """
     Constructs and compiles a deep recurrent neural network using TensorFlow/Keras.
-    
+
     Args:
-        lookback_steps (int): Lookback window size (number of historical days).
-        n_features (int): Number of feature columns in input sequences.
-        units (int): Number of hidden units in recurrent layers.
-        cell_type (str): Recurrent cell architecture ('LSTM', 'GRU', 'SimpleRNN').
-        n_layers (int): Total number of recurrent layers.
-        dropout (float): Dropout fraction applied after each recurrent layer.
-        loss (str): Loss function identifier (e.g. 'huber', 'mse', 'mae').
-        optimizer (str): Optimizer identifier (e.g. 'adam', 'rmsprop').
-        bidirectional (bool): If True, wraps recurrent layers in Bidirectional wrappers.
-        future_steps (int): Number of future steps/days to predict (default 1).
-        
+        lookback_steps: Number of historical days.
+        n_features: Number of feature columns in input sequences.
+        units: Number of hidden units in recurrent layers.
+        cell_type: Recurrent cell architecture ('LSTM', 'GRU', 'SimpleRNN').
+        n_layers: Total number of recurrent layers.
+        dropout: Dropout fraction applied after each recurrent layer.
+        loss: Loss function identifier (e.g. 'huber', 'mse', 'mae').
+        optimizer: Optimizer identifier (e.g. 'adam', 'rmsprop').
+        bidirectional: If True, wraps recurrent layers in Bidirectional wrappers.
+        future_steps: Number of future steps/days to predict (default 1).
+
     Returns:
-        tf.keras.Model: Compiled Keras Sequential model.
+        Compiled Keras Sequential model.
     """
     # --------------------------------------------------------------------------
-    # Step 1: Cell Type Resolve & Validation
+    # Step 0: Hyperparameter Validation
+    # --------------------------------------------------------------------------
+    positive_integer_params = {
+        "lookback_steps": lookback_steps,
+        "n_features": n_features,
+        "units": units,
+        "n_layers": n_layers,
+        "future_steps": future_steps,
+    }
+
+    for name, value in positive_integer_params.items():
+        validate_positive_integer(name, value)
+
+    validate_dropout(dropout)
+
+    # --------------------------------------------------------------------------
+    # Step 1: Cell Type Resolution
     # --------------------------------------------------------------------------
     cell_type_upper = cell_type.upper()
-    cell_map = {
-        "LSTM": LSTM,
-        "GRU": GRU,
-        "SIMPLERNN": SimpleRNN,
-        "RNN": SimpleRNN
-    }
-    
-    if cell_type_upper not in cell_map:
+
+    if cell_type_upper not in CELL_TYPES:
         raise ValueError(
-            f"Unsupported cell_type '{cell_type}'. "
-            f"Available options are: {list(cell_map.keys())}"
+            "Unsupported cell_type "
+            f"'{cell_type}'. "
+            "Available options are: "
+            f"{list(CELL_TYPES.keys())}"
         )
-    cell_class = cell_map[cell_type_upper]
-    
+
+    cell_class = CELL_TYPES[cell_type_upper]
+
     # --------------------------------------------------------------------------
     # Step 2: Assemble Layer Architecture
     # --------------------------------------------------------------------------
-    model = Sequential()
-    
-    for i in range(n_layers):
-        # Determine sequence return behavior
-        # Only the final recurrent layer should return a 2D state vector (return_sequences=False)
-        # to interface properly with the Dense output layer.
-        is_last = (i == n_layers - 1)
-        return_seqs = not is_last
-        
-        # Configure arguments for this layer
-        layer_kwargs = {
-            "units": units,
-            "return_sequences": return_seqs
-        }
-        
-        # Set input shape for the initial recurrent layer
-        if i == 0:
-            layer_kwargs["input_shape"] = (lookback_steps, n_features)
-            
-        # Instantiate recurrent cell
-        recurrent_layer = cell_class(**layer_kwargs)
-        
-        # Wrap in bidirectional layer if requested
+    model = Sequential(
+        [
+            tf.keras.Input(shape=(lookback_steps, n_features)),
+        ]
+    )
+
+    for layer_index in range(n_layers):
+        is_last_layer = layer_index == n_layers - 1
+
+        recurrent_layer = cell_class(
+            units=units,
+            return_sequences=not is_last_layer,
+        )
+
         if bidirectional:
-            if i == 0:
-                # Keras Bidirectional wrapper needs input_shape passed via kwargs/args
-                model.add(Bidirectional(recurrent_layer, input_shape=(lookback_steps, n_features)))
-            else:
-                model.add(Bidirectional(recurrent_layer))
+            model.add(Bidirectional(recurrent_layer))
         else:
             model.add(recurrent_layer)
-            
-        # Add regularization dropout
+
         if dropout > 0.0:
             model.add(Dropout(dropout))
-            
+
     # --------------------------------------------------------------------------
     # Step 3: Compile Network with Targets
     # --------------------------------------------------------------------------
     # Output layer produces predictions for the specified future time steps
     model.add(Dense(future_steps, activation="linear"))
-    
-    # Compile model using unscaled MAE as a tracking metric during training
-    model.compile(
-        loss=loss,
-        metrics=["mean_absolute_error"],
-        optimizer=optimizer
-    )
-    
+
+    # Compile the model with the configured loss function and evaluation metric.
+    model.compile(loss=loss, metrics=["mae"], optimizer=optimizer)
+
     return model

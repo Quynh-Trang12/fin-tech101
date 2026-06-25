@@ -1,78 +1,88 @@
 # ==============================================================================
-# Purpose: 
+# Purpose:
 # Deep learning training pipeline with seed determinism.
 # ==============================================================================
 
-import os
-import random
+from pathlib import Path
 import argparse
-import numpy as np
-import tensorflow as tf
+from typing import Any
 
 # Import local data processing and model factory modules
 from data_processing import load_and_process_data
 from model_factory import build_dl_model
-
-# ==============================================================================
-# SEED DETERMINISM SETUP
-# ==============================================================================
-
-def set_seed(seed=314):
-    """Enforces random seed determinism across standard runtime environments."""
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-    # Configure TensorFlow single-thread execution settings for reproducibility if needed,
-    # but standard TF seed is usually sufficient for classroom settings.
-    print(f"[Seed Setup] Deterministic seed set to: {seed}")
-
-# Set seed at import time
-set_seed(314)
+from utils.experiment_utils import (
+    add_model_arguments,
+    parse_feature_columns,
+    set_seed,
+)
+from config import (
+    RESULTS_DIR,
+    DATA_DIR,
+    TICKER,
+    START_DATE,
+    END_DATE,
+    SPLIT_DATE,
+    LOOKBACK_STEPS,
+    FORECAST_OFFSET,
+    FUTURE_STEPS,
+)
 
 # ==============================================================================
 # TRAINING PIPELINE
 # ==============================================================================
 
+
 def train_model(
-    ticker="CBA.AX",
-    start_date="2020-01-01",
-    end_date="2024-07-02",
-    split_date="2023-08-02",
-    lookback_steps=50,
-    forecast_offset=1,
-    scale=True,
-    shuffle=True,
-    feature_columns=['adjclose', 'volume', 'open', 'high', 'low'],
-    units=128,
-    cell_type="LSTM",
-    n_layers=2,
-    dropout=0.3,
-    loss="huber",
-    optimizer="adam",
-    bidirectional=False,
-    epochs=20,
-    batch_size=64,
-    model_name="lstm_model",
-    subfolder="",
-    future_steps=1
-):
+    ticker: str = TICKER,
+    start_date: str = START_DATE,
+    end_date: str = END_DATE,
+    split_date: str = SPLIT_DATE,
+    lookback_steps: int = LOOKBACK_STEPS,
+    forecast_offset: int = FORECAST_OFFSET,
+    scale: bool = True,
+    shuffle: bool = True,
+    feature_columns: list[str] | None = None,
+    units: int = 128,
+    cell_type: str = "LSTM",
+    n_layers: int = 2,
+    dropout: float = 0.3,
+    loss: str = "huber",
+    optimizer: str = "adam",
+    bidirectional: bool = False,
+    epochs: int = 20,
+    batch_size: int = 64,
+    model_name: str = "lstm_model",
+    subfolder: str = "",
+    future_steps: int = FUTURE_STEPS,
+    results_dir: Path = RESULTS_DIR,
+) -> dict[str, Any]:
     """
     Orchestrates the entire training pipeline: loads/preprocesses data,
     creates the model from the factory, fits the model, and saves weights.
-    
+
     Returns:
         dict: Training history and processed data dictionary for downstream use.
     """
+    if feature_columns is None:
+        feature_columns = ["adjclose", "volume", "open", "high", "low"]
+
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1.")
+
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1.")
+
     # --------------------------------------------------------------------------
     # Step 1: Enforce Determinism
     # --------------------------------------------------------------------------
     set_seed(314)
-    
+
     # --------------------------------------------------------------------------
     # Step 2: Load and Segment Dataset
     # --------------------------------------------------------------------------
-    print(f"\n[Train Pipeline] Loading dataset for {ticker} from {start_date} to {end_date}...")
+    print(
+        f"\n[Train Pipeline] Loading dataset for {ticker} from {start_date} to {end_date}..."
+    )
     data = load_and_process_data(
         ticker=ticker,
         start_date=start_date,
@@ -84,22 +94,26 @@ def train_model(
         split_by_date=True,
         split_date=split_date,
         feature_columns=feature_columns,
-        cache_dir="data",
-        future_steps=future_steps
+        cache_dir=DATA_DIR,
+        future_steps=future_steps,
     )
-    
+
     X_train = data["X_train"]
     y_train = data["y_train"]
-    
+
     print(f"[Train Pipeline] Train shapes - X: {X_train.shape}, y: {y_train.shape}")
-    print(f"[Train Pipeline] Test shapes  - X: {data['X_test'].shape}, y: {data['y_test'].shape}")
-    
+    print(
+        f"[Train Pipeline] Test shapes  - X: {data['X_test'].shape}, y: {data['y_test'].shape}"
+    )
+
     # --------------------------------------------------------------------------
     # Step 3: Instantiate Model Architecture
     # --------------------------------------------------------------------------
     n_features = len(feature_columns)
-    print(f"[Train Pipeline] Building model architecture: {cell_type} | Units: {units} | Layers: {n_layers}")
-    
+    print(
+        f"[Train Pipeline] Building model architecture: {cell_type} | Units: {units} | Layers: {n_layers}"
+    )
+
     model = build_dl_model(
         lookback_steps=lookback_steps,
         n_features=n_features,
@@ -110,14 +124,16 @@ def train_model(
         loss=loss,
         optimizer=optimizer,
         bidirectional=bidirectional,
-        future_steps=future_steps
+        future_steps=future_steps,
     )
-    
+
     # --------------------------------------------------------------------------
     # Step 4: Model Training (Fitting)
     # --------------------------------------------------------------------------
-    print(f"[Train Pipeline] Training model '{model_name}' for {epochs} epochs with batch size {batch_size}...")
-    
+    print(
+        f"[Train Pipeline] Training model '{model_name}' for {epochs} epochs with batch size {batch_size}..."
+    )
+
     # Track performance using validation data to monitor overfitting
     history = model.fit(
         X_train,
@@ -125,58 +141,58 @@ def train_model(
         epochs=epochs,
         batch_size=batch_size,
         validation_data=(data["X_test"], data["y_test"]),
-        verbose=1
+        verbose=1,
     )
-    
+
     # --------------------------------------------------------------------------
     # Step 5: Save Model Weights and Metadata
     # --------------------------------------------------------------------------
-    weights_dir = os.path.join("results", subfolder) if subfolder else "results"
-    weights_path = os.path.join(weights_dir, f"{model_name}.weights.h5")
-    os.makedirs(os.path.dirname(weights_path), exist_ok=True)
-    
-    # Explicitly remove the old weights file if it exists to ensure a fresh overwrite
-    if os.path.exists(weights_path):
-        os.remove(weights_path)
-        print(f"[Train Pipeline] Overwriting existing model weights at: {weights_path}")
-        
+    weights_dir = results_dir / subfolder if subfolder else results_dir
+    weights_path = weights_dir / f"{model_name}.weights.h5"
+    weights_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if weights_path.exists():
+        print(
+            "[Train Pipeline] Overwriting existing model weights at: "
+            f"{weights_path.as_posix()}"
+        )
+
     model.save_weights(weights_path)
-    print(f"[Train Pipeline] Successfully saved model weights to: {weights_path}")
-    
-    return {
-        "history": history.history,
-        "data": data,
-        "model": model
-    }
+    print(
+        f"[Train Pipeline] Successfully saved model weights to: {weights_path.as_posix()}"
+    )
+
+    return {"history": history.history, "data": data, "model": model}
+
+
+# ==============================================================================
+# COMMAND-LINE INTERFACE
+# ==============================================================================
+
+
+def create_arg_parser() -> argparse.ArgumentParser:
+    """Create the command-line parser for the training script."""
+    parser = argparse.ArgumentParser(
+        description="Train deep recurrent stock prediction models."
+    )
+    add_model_arguments(parser)
+
+    parser.add_argument(
+        "--epochs", type=int, default=20, help="Number of training epochs."
+    )
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size.")
+
+    return parser
+
 
 # ==============================================================================
 # ENTRY POINT
 # ==============================================================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train deep recurrent stock prediction models.")
-    
-    parser.add_argument("--ticker", type=str, default="CBA.AX", help="Stock ticker symbol.")
-    parser.add_argument("--cell_type", type=str, default="LSTM", help="Recurrent cell type (LSTM, GRU, SimpleRNN).")
-    parser.add_argument("--n_layers", type=int, default=2, help="Number of recurrent layers.")
-    parser.add_argument("--units", type=int, default=128, help="Number of recurrent hidden units.")
-    parser.add_argument("--dropout", type=float, default=0.3, help="Dropout rate.")
-    parser.add_argument("--loss", type=str, default="huber", help="Loss function (huber, mse, mae).")
-    parser.add_argument("--epochs", type=int, default=20, help="Number of training epochs.")
-    parser.add_argument("--batch_size", type=int, default=64, help="Batch size.")
-    parser.add_argument("--model_name", type=str, default="lstm_model", help="Name to save model weights as.")
-    parser.add_argument("--subfolder", type=str, default="", help="Subfolder within results directory.")
-    parser.add_argument("--bidirectional", action="store_true", help="Wrap recurrent layers in Bidirectional wrapper.")
-    parser.add_argument("--lookback_steps", type=int, default=50, help="Number of past time steps to look back.")
-    parser.add_argument("--forecast_offset", type=int, default=1, help="Offset to start forecast ahead.")
-    parser.add_argument("--future_steps", type=int, default=1, help="Number of future steps to predict.")
-    parser.add_argument("--feature_columns", type=str, default="adjclose,volume,open,high,low", help="Comma-separated feature list.")
-    
+    parser = create_arg_parser()
     args = parser.parse_args()
-    
-    # Parse feature columns from CSV string
-    feature_list = [f.strip() for f in args.feature_columns.split(",") if f.strip()]
-    
+
     train_model(
         ticker=args.ticker,
         cell_type=args.cell_type,
@@ -192,5 +208,5 @@ if __name__ == "__main__":
         lookback_steps=args.lookback_steps,
         forecast_offset=args.forecast_offset,
         future_steps=args.future_steps,
-        feature_columns=feature_list
+        feature_columns=parse_feature_columns(args.feature_columns),
     )

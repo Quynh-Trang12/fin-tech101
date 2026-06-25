@@ -3,42 +3,18 @@
 # C.5 Multivariate and Multistep Deep Learning experiment sweep orchestrator.
 # ==============================================================================
 
-from config import TICKER, START_DATE, END_DATE, SPLIT_DATE, LOOKBACK_STEPS, FORECAST_OFFSET
+from config import (
+    C5_SWEEP_CONFIGS,
+    END_DATE,
+    FORECAST_OFFSET,
+    LOOKBACK_STEPS,
+    RESULTS_DIR,
+    SPLIT_DATE,
+    START_DATE,
+    TICKER,
+)
 from base_sweep import BaseSweepRunner
-
-# C.5 configurations are multivariate and/or multi-step models
-C5_CONFIGS = {
-    "lstm_uni_multistep": {
-        "description": "Univariate Multistep (Close Only -> 5 Days Forecast)",
-        "feature_columns": ["adjclose"],
-        "future_steps": 5,
-        "epochs": 20,
-        "batch_size": 64,
-        "units": 128,
-        "n_layers": 2,
-        "cell_type": "LSTM"
-    },
-    "lstm_multi_singlestep": {
-        "description": "Multivariate Single-Step (All Features -> 1 Day Forecast)",
-        "feature_columns": ["adjclose", "volume", "open", "high", "low"],
-        "future_steps": 1,
-        "epochs": 20,
-        "batch_size": 64,
-        "units": 128,
-        "n_layers": 2,
-        "cell_type": "LSTM"
-    },
-    "lstm_multi_multistep": {
-        "description": "Multivariate Multistep Combined (All Features -> 5 Days Forecast)",
-        "feature_columns": ["adjclose", "volume", "open", "high", "low"],
-        "future_steps": 5,
-        "epochs": 20,
-        "batch_size": 64,
-        "units": 128,
-        "n_layers": 2,
-        "cell_type": "LSTM"
-    }
-}
+from typing import Any
 
 
 class C5SweepRunner(BaseSweepRunner):
@@ -50,51 +26,51 @@ class C5SweepRunner(BaseSweepRunner):
 
     def __init__(
         self,
-        ticker,
-        start_date,
-        end_date,
-        split_date,
-        lookback_steps,
-        forecast_offset,
-        dropout=0.3
+        ticker: str,
+        start_date: str,
+        end_date: str,
+        split_date: str,
+        lookback_steps: int,
+        forecast_offset: int,
+        dropout: float = 0.3,
     ):
         """
         Initializes the C5 sweep runner with window size and offset parameters.
         """
-        super().__init__(ticker, start_date, end_date, split_date, dropout)
+        super().__init__(
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+            split_date=split_date,
+            dropout=dropout,
+            subfolder="c5",
+        )
         self.lookback_steps = lookback_steps
         self.forecast_offset = forecast_offset
-        self.subfolder = "c5"
 
-    def get_global_params(self):
-        """
-        Overrides parent method to include C.5 specific settings:
-        lookback_steps, forecast_offset, loss="huber", scale=True, shuffle=True.
-        """
-        params = super().get_global_params()
-        params.update({
+    def get_extra_global_params(self) -> dict[str, Any]:
+        """Return C.5-specific parameters shared by all configurations."""
+        return {
             "lookback_steps": self.lookback_steps,
             "forecast_offset": self.forecast_offset,
             "scale": True,
             "shuffle": True,
-            "loss": "huber"
-        })
-        return params
+            "loss": "huber",
+        }
 
-    def print_header(self):
-        """
-        Overrides parent method to output C.5 specific execution parameters.
-        """
-        print("=" * 80)
-        print(f"STARTING SWEEP RUNNER: {self.__class__.__name__}")
-        print(f"Ticker:                 {self.ticker}")
-        print(f"Data Period:            {self.start_date} to {self.end_date}")
-        print(f"Split Date:             {self.split_date}")
-        print(f"Lookback Steps:         {self.lookback_steps}")
-        print(f"Forecast Offset:        {self.forecast_offset}")
-        print("=" * 80)
+    def get_extra_header_lines(self) -> list[tuple[str, Any]]:
+        """Return C.5-specific terminal header lines."""
+        return [
+            ("Lookback Steps", self.lookback_steps),
+            ("Forecast Offset", self.forecast_offset),
+        ]
 
-    def format_results_row(self, config_id, config_params, test_results):
+    def format_results_row(
+        self,
+        config_id: str,
+        config_params: dict[str, Any],
+        test_results: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Formats C5 configuration parameters and test metrics into a row matching
         the C5 report structure.
@@ -110,7 +86,7 @@ class C5SweepRunner(BaseSweepRunner):
             "DA (%)": round(test_results["DA"], 2),
             "Trading Acc (%)": round(test_results["trading_accuracy"], 2),
             "Total Profit ($)": round(test_results["total_profit"], 2),
-            "Profit/Trade ($)": round(test_results["profit_per_trade"], 2)
+            "Profit/Trade ($)": round(test_results["profit_per_trade"], 2),
         }
 
 
@@ -118,7 +94,8 @@ class C5SweepRunner(BaseSweepRunner):
 # MAIN RUNNER EXECUTION
 # ==============================================================================
 
-def run_c5_sweeps():
+
+def run_c5_sweeps() -> None:
     """
     Main entry point for running Task C.5 multivariate and multistep sweeps.
     """
@@ -129,14 +106,13 @@ def run_c5_sweeps():
         split_date=SPLIT_DATE,
         lookback_steps=LOOKBACK_STEPS,
         forecast_offset=FORECAST_OFFSET,
-        dropout=0.3
+        dropout=0.3,
     )
     runner.run_sweep(
-        configs=C5_CONFIGS,
-        output_csv_path="results/c5/c5_sweep_results.csv"
+        configs=C5_SWEEP_CONFIGS,
+        output_csv_path=RESULTS_DIR / "c5" / "c5_sweep_results.csv",
     )
 
 
 if __name__ == "__main__":
     run_c5_sweeps()
-
