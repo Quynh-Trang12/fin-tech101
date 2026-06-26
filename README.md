@@ -1,129 +1,198 @@
-# FinTech101: Stock Price Prediction System
+# FinTech101: A Modular Deep Learning Framework for Stock Price Forecasting
 
-## Course Project: COS30018 - Intelligent Systems (Option C)
+## 📌 Overview
 
-FinTech101 is an end-to-end, machine learning-based stock price prediction system developed as an individual project under the COS30018 Intelligent Systems curriculum. The project evaluates the limits and capabilities of deep learning models—specifically Stacked Long Short-Term Memory (LSTM) networks—in forecasting historical daily stock prices.
+FinTech101 is a modular deep learning project for forecasting stock prices from historical market data. It provides a reusable workflow for preparing datasets, developing forecasting models, evaluating prediction performance, and comparing experimental results.
 
----
-
-## 📅 Project Overview
-
-This project is structured as a progression from initial environment setup and baseline verification, through data processing and exploratory data analysis, to advanced modeling techniques, ensembles, and custom supervised research extensions. 
-
-For detailed information on individual tasks, weekly progress, and in-depth technical specifications, please refer to the **[Project Wiki](#-project-wiki)**.
+The project was developed for **COS30018 – Intelligent Systems (Project Option C)** by progressively extending the original **v0.1** and **P1** implementations into a maintainable and extensible machine learning codebase.
 
 ---
 
-## 📂 Repository File Structure
+## 🎯 Objectives and Key Capabilities
 
-The project maintains a flat, modular codebase designed for scalability:
+The objective of FinTech101 is to investigate how different deep learning approaches influence stock price forecasting while building a reusable project that supports fair, reproducible, and extensible experiments. Each completed Option C task contributes a new capability that becomes part of the shared stock forecasting workflow.
+
+### 1. Reusable Experiment Pipeline
+
+Provides a consistent workflow for downloading, preparing, and reusing historical market data across every experiment.
+
+### 2. Configurable Models
+
+Builds recurrent neural networks from configurable parameters instead of maintaining separate implementations for each model architecture.
+
+### 3. Experiment Automation
+
+Runs repeatable training, evaluation, and experiment sweeps through a shared execution pipeline.
+
+### 4. Comprehensive Performance Evaluation
+
+Compares forecasting models using prediction accuracy, price movement direction, and trading-oriented performance metrics.
+
+### 5. Modular Architecture
+
+Organises the forecasting workflow into reusable components that can be maintained and extended independently.
+
+---
+
+## 📂 Repository Structure
+
+The repository separates implementation code, datasets, generated outputs, reference code, and documentation so that each part of the project has a clearly defined responsibility.
 
 ```text
 fin-tech101/
-├── .gitignore               # Git exclusions
-├── README.md                # You are here
-├── requirements.txt         # Dependencies
-├── baselines/               # Task C.1: Executable baselines
-├── csv-results/             # Task outputs: CSV evaluations
-├── data/                    # Local data cache for data processing
-├── docs/                    # Assignment briefs
-├── references/              # Untouched, original baseline codebases
-├── reports/                 # Task C.1-C.7: Submission reports
-├── results/                 # Model checkpoints & charts
-├── src/                     
-│   ├── base_sweep.py        # Task C.4/C.5: Sweep logic
-│   ├── config.py            # Global hyperparameters
-│   ├── data_downloader.py   # Task C.2: Data fetcher
-│   ├── data_processing.py   # Task C.2: Dataset processing
-│   ├── model_factory.py     # Task C.4: Network constructors
-│   ├── run_c4_sweeps.py     # Task C.4: Baseline sweeps
-│   ├── run_c5_sweeps.py     # Task C.5: Advanced sweeps
-│   ├── test.py              # Task C.5/C.6: Evaluation
-│   ├── train.py             # Task C.5/C.6: Training
-│   └── visualization.py     # Task C.3: EDA charting
-└── wiki/                    # Wiki documentation
+├── baselines/                  # Modified, executable Option C codebases
+├── references/                 # Original Option C codebases
+├── data/                       # Cached datasets
+├── docs/                       # Assignment resources
+├── results/                    # Generated artefacts
+├── csv-results/                # Evaluation outputs
+├── src/                        # Core pipeline
+│   ├── utils/                  # Shared utilities
+│   │   ├── __init__.py         # Package marker
+│   │   └── experiment_utils.py # Pipeline helpers
+│   ├── config.py               # Shared settings
+│   ├── data_downloader.py      # Data download
+│   ├── data_processing.py      # Data preparation
+│   ├── visualization.py        # Data visualisation
+│   ├── model_factory.py        # Model builder
+│   ├── train.py                # Model training
+│   ├── test.py                 # Model evaluation
+│   ├── base_sweep.py           # Sweep framework
+│   ├── run_c4_sweeps.py        # Hyperparameter sweeps
+│   └── run_c5_sweeps.py        # Advanced forecasting
+├── requirements.txt            # Project dependencies
+└── README.md                   # You are here
 ```
 
 ---
 
-## ⚙️ Environment Setup & Installation
+## ⚙️ Getting Started
 
-### Prerequisite
-- Python 3.12 (Recommended) or 3.11
+FinTech101 is designed to run entirely on a local machine. Before running any experiments, clone the repository, create a Python virtual environment, and install the project dependencies.
 
-### Installation Commands
-Run the following commands in your terminal (PowerShell for Windows) to initialize the virtual environment and install the required dependencies:
+### 1. Clone the Repository
 
-```powershell
-# 1. Create a virtual environment named .venv
-py -3.12 -m venv .venv
+```bash
+git clone https://github.com/Quynh-Trang12/fin-tech101.git
+cd fin-tech101
+```
 
-# 2. Activate the virtual environment
-.\.venv\Scripts\Activate.ps1
+### 2. Create and Activate Virtual Environment
 
-# 3. Upgrade the package installer
-python -m pip install --upgrade pip
+**Create a virtual enviroment:**
+```bash
+python -m venv .venv
+```
 
-# 4. Install project packages
+**Activate the virtual environment:**
+
+*Windows*
+```bash
+.venv\Scripts\activate
+```
+
+*macOS / Linux*
+```bash
+source .venv/bin/activate
+```
+
+### 3. Install Project Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### Dependency Stack
-- `tensorflow==2.17.1`: Deep learning neural network constructor
-- `numpy==1.26.4`: High-performance numerical computations
-- `pandas==2.2.3`: Structured data frames and time-series indexes
-- `scikit-learn==1.5.2`: MinMaxScaler and dataset preprocessing
-- `matplotlib==3.9.2`: Data visualization plotting engine
-- `yfinance==0.2.48`: Live stock market API integration
-
 ---
 
-## 🚀 Execution Guide
+## 💻 Running the Project
 
-Make sure your virtual environment is active (`(.venv)`) before executing the scripts.
+A typical experiment follows the execution pipeline below. Each stage produces the primary inputs for the following stage of the stock forecasting pipeline.
 
-### 1. Run Baseline Models
-Execute the initial reference models to establish performance baselines:
-```powershell
-# v0.1 Baseline
-python baselines/v0.1/stock_prediction.py
-
-# P1 Baseline
-python baselines/p1/train.py
-python baselines/p1/test.py
+### 4. Download Historical Market Data
+```bash
+python src/data_downloader.py
 ```
+**Primary Output**
+`data/CBA.AX_cache.csv`: Cached historical market dataset.
 
-### 2. Train the Active Modular Model
-Trains the networks using settings specified in `src/config.py` and saves weights to `results/`.
-```powershell
+
+### 5. Prepare the Dataset
+```bash
+python src/data_processing.py
+```
+**Primary Output**
+`results/c2/CBA_AX_scalers.pkl`: Training-fitted feature scalers reused throughout the forecasting pipeline.
+
+
+### 6. Generate Market Visualisations
+```bash
+python src/visualization.py
+```
+**Primary Output**
+`results/c3/`: Candlestick charts and moving boxplots for historical market analysis.
+
+
+### 7. Train a Stock Forecasting Model
+```bash
 python src/train.py
 ```
+**Primary Output**
+`results/lstm_model.weights.h5`: Trained model weights, prediction outputs, and training history.
 
-### 3. Evaluate and Simulate Trading
-Loads the trained weights, runs inferences on test data, prints unscaled performance metrics, performs simulated trading, and plots forecasts.
-```powershell
+
+### 8. Evaluate Model Performance
+```bash
 python src/test.py
 ```
+**Primary Output**
+`csv-results/lstm_model.csv` and `results/lstm_model_prediction.png`: Prediction CSV files, evaluation metrics, and prediction plots.
 
-### 4. Run Hyperparameter Sweeps
-Execute comprehensive parameter sweeps for advanced tasks:
-```powershell
+
+### 9. Compare Recurrent Model Architectures and Hyperparameter Configurations
+```bash
 python src/run_c4_sweeps.py
+```
+**Primary Output**
+`results/c4/`: Hyperparameter sweep summaries and model comparison results.
+
+
+### 10. Run Multivariate and Multi-step Forecasting Experiments
+```bash
 python src/run_c5_sweeps.py
 ```
+**Primary Output**
+`results/c5/`: Multivariate and multi-step forecasting experiment results.
 
 ---
 
-## 🛡️ API Rate-Limit Resilience
-To bypass `HTTP 429 (Too Many Requests)` rate-limiting blocks from Yahoo Finance API, the codebase is equipped with a fallback caching mechanism. If the live downloader returns empty data, the system automatically checks for a locally cached dataset in the `data/` directory.
+## 📔 Option C Task Mapping
+
+The table below maps each Project Option C task to its primary implementation and the corresponding outputs produced by the project.
+
+| Task                         | Primary Implementation                                                                             | Primary Outputs                                                                    |
+| :--------------------------- | :------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------- |
+| **C.1 Environment Setup**    | `baselines/`, `references/`, `requirements.txt`, `README.md`                                       | Local development environment, GitHub repository, and project documentation        |
+| **C.2 Data Processing**      | `src/data_downloader.py`, `src/data_processing.py`, `src/config.py`                                | Cached datasets, fitted feature scalers, and preprocessing artefacts               |
+| **C.3 Data Visualisation**   | `src/visualization.py`                                                                             | Candlestick charts and moving boxplots                                             |
+| **C.4 Deep Learning Models** | `src/model_factory.py`, `src/train.py`, `src/test.py`, `src/base_sweep.py`, `src/run_c4_sweeps.py` | Trained model weights, prediction results, evaluation metrics, and sweep summaries |
+| **C.5 Advanced Forecasting** | `src/data_processing.py`, `src/test.py`, `src/run_c5_sweeps.py`                                    | Multivariate and multi-step forecasting experiment results                         |
+| **C.6 Ensemble Learning**    | *(Planned)*                                                                                        | Ensemble learning experiments and evaluation results                               |
+| **C.7 Independent Research** | *(Planned)*                                                                                        | Research extension implementation and supporting artefacts                         |
 
 ---
 
-## 📖 Project Wiki
+## 📖 Documentation
 
-For task breakdowns, architectural blueprints, error-handling methodologies, and weekly academic reports, please consult the documentation set in the `wiki/` directory. This is designed for direct upload to the GitHub Wiki interface:
+Comprehensive technical documentation is maintained separately through the project's GitHub Wiki. The Wiki expands on the implementation, design decisions, and experimental work summarised throughout this repository.
 
-- **[Home](../../wiki/Home)**: Main hub and quickstart.
-- **[System Architecture](../../wiki/System-Architecture)**: Design blueprints and execution logic flow.
-- **[Environment Setup](../../wiki/Environment-Setup)**: Local installation guides and API rate-limiting workarounds.
-- **[Weekly Reports](../../wiki/Weekly-Reports-Hub)**: Academic deliverables tracking sheet.
+Available documentation includes:
+
+* **Home** — Project background, scope, and objectives.
+* **Repository Structure** — Responsibilities of each project directory and source module.
+* **System Architecture** — High-level architecture and module interactions.
+* **Environment Setup** — Development environment and dependency rationale.
+* **Running Individual Components** — Usage guide for each executable script.
+* **Experimental Pipeline** — End-to-end workflow from data acquisition to model evaluation.
+* **Evaluation Metrics** — Definitions and interpretation of all reported metrics.
+* **Option C Task Mapping** — Traceability between project requirements and implementation.
+* **Weekly Reports** — Archived reports for Tasks C.1–C.7 documenting weekly progress.
