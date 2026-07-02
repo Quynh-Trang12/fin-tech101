@@ -22,6 +22,7 @@ from config import (
     START_DATE,
     END_DATE,
     SPLIT_DATE,
+    VALIDATION_RATIO,
     LOOKBACK_STEPS,
     FORECAST_OFFSET,
     FUTURE_STEPS,
@@ -37,6 +38,7 @@ def train_model(
     start_date: str = START_DATE,
     end_date: str = END_DATE,
     split_date: str = SPLIT_DATE,
+    validation_ratio: float = VALIDATION_RATIO,
     lookback_steps: int = LOOKBACK_STEPS,
     forecast_offset: int = FORECAST_OFFSET,
     scale: bool = True,
@@ -93,6 +95,7 @@ def train_model(
         forecast_offset=forecast_offset,
         split_by_date=True,
         split_date=split_date,
+        validation_ratio=validation_ratio,
         feature_columns=feature_columns,
         cache_dir=DATA_DIR,
         future_steps=future_steps,
@@ -102,6 +105,9 @@ def train_model(
     y_train = data["y_train"]
 
     print(f"[Train Pipeline] Train shapes - X: {X_train.shape}, y: {y_train.shape}")
+    print(
+        f"[Train Pipeline] Val shapes   - X: {data['X_val'].shape}, y: {data['y_val'].shape}"
+    )
     print(
         f"[Train Pipeline] Test shapes  - X: {data['X_test'].shape}, y: {data['y_test'].shape}"
     )
@@ -140,7 +146,7 @@ def train_model(
         y_train,
         epochs=epochs,
         batch_size=batch_size,
-        validation_data=(data["X_test"], data["y_test"]),
+        validation_data=(data["X_val"], data["y_val"]),
         verbose=1,
     )
 
@@ -208,5 +214,6 @@ if __name__ == "__main__":
         lookback_steps=args.lookback_steps,
         forecast_offset=args.forecast_offset,
         future_steps=args.future_steps,
+        validation_ratio=args.validation_ratio,
         feature_columns=parse_feature_columns(args.feature_columns),
     )

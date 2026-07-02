@@ -13,6 +13,7 @@ TICKER = "CBA.AX"
 START_DATE = "2020-01-01"
 END_DATE = "2024-07-02"
 SPLIT_DATE = "2023-08-02"  # Chronological split boundary date (train ends 2023-08-01, test starts 2023-08-02)
+VALIDATION_RATIO = 0.15  # Chronological validation split ratio (relative to the training set)
 
 # ----- Sliding Window Parameters -----
 LOOKBACK_STEPS = 50  # Lookback sequence window size (days)

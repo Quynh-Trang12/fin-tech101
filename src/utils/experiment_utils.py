@@ -5,6 +5,7 @@
 
 import argparse
 import tensorflow as tf
+from config import VALIDATION_RATIO
 
 # ==============================================================================
 # SEED DETERMINISM
@@ -43,6 +44,12 @@ def add_model_arguments(parser: argparse.ArgumentParser) -> None:
         ("--lookback_steps", int, 50, "Number of past time steps to use."),
         ("--forecast_offset", int, 1, "Prediction offset from the input window."),
         ("--future_steps", int, 1, "Number of future steps to predict."),
+        (
+            "--validation_ratio",
+            float,
+            VALIDATION_RATIO,
+            "Chronological validation split ratio relative to the training set.",
+        ),
         (
             "--feature_columns",
             str,

@@ -23,6 +23,7 @@ from config import (
     TICKER,
     DATA_DIR,
     RESULTS_DIR,
+    VALIDATION_RATIO,
 )
 
 # ==============================================================================
@@ -73,7 +74,7 @@ def load_raw_stock_data(
 
     import yfinance as yf
 
-    raw_df = yf.download(ticker, start=start_date, end=end_date)
+    raw_df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=False)
 
     if raw_df.empty:
         raise ValueError(
@@ -149,7 +150,6 @@ def standardise_stock_dataframe(
         )
 
     df.ffill(inplace=True)
-    df.bfill(inplace=True)
     df["date"] = df.index
 
     return df
@@ -597,6 +597,7 @@ def load_and_process_data(
     split_by_date: bool = True,
     split_ratio: float = 0.8,
     split_date: str | None = None,
+    validation_ratio: float = VALIDATION_RATIO,
     feature_columns: list[str] | None = None,
     cache_dir: Path = DATA_DIR,
     future_steps: int = 1,
@@ -620,6 +621,7 @@ def load_and_process_data(
         split_by_date: Use chronological target-date split when true.
         split_ratio: Training fraction used when no explicit split date is given.
         split_date: First target date assigned to the test set.
+        validation_ratio: Chronological validation split ratio (relative to the training set).
         feature_columns: Input feature names. Defaults to OHLCV-style features.
         cache_dir: Directory for raw stock CSV cache.
         future_steps: Number of future target prices per sample.
@@ -639,6 +641,9 @@ def load_and_process_data(
             f"'{TARGET_COLUMN}' must be included in feature_columns because "
             "it is used as the prediction target."
         )
+
+    if not (0.0 <= validation_ratio < 1.0):
+        raise ValueError("validation_ratio must satisfy 0 <= validation_ratio < 1.")
 
     # --------------------------------------------------------------------------
     # Phase 1: Load and clean raw market data
@@ -680,18 +685,60 @@ def load_and_process_data(
     # --------------------------------------------------------------------------
     # Phase 4: Split samples before fitting any scaler
     # --------------------------------------------------------------------------
+    # Chronological validation split is derived from the training set, so we
+    # perform the train/test split without shuffling first.
     split_data = split_sequences(
         sequence_data=sequence_data,
         split_by_date=split_by_date,
         split_ratio=split_ratio,
         split_date=split_date,
-        shuffle=shuffle,
+        shuffle=False,
     )
 
-    X_train = split_data["X_train"]
-    y_train = split_data["y_train"]
+    X_train_full = split_data["X_train"]
+    y_train_full = split_data["y_train"]
+    train_input_dates_full = split_data["train_input_dates"]
+
     X_test = split_data["X_test"]
     y_test = split_data["y_test"]
+    test_input_dates = split_data["test_input_dates"]
+
+    if validation_ratio > 0.0:
+        val_size = int(len(X_train_full) * validation_ratio)
+        train_size = len(X_train_full) - val_size
+
+        X_train = X_train_full[:train_size]
+        y_train = y_train_full[:train_size]
+        train_input_dates = train_input_dates_full[:train_size]
+
+        X_val = X_train_full[train_size:]
+        y_val = y_train_full[train_size:]
+        val_input_dates = train_input_dates_full[train_size:]
+    else:
+        X_train = X_train_full
+        y_train = y_train_full
+        train_input_dates = train_input_dates_full
+        X_val = np.empty((0, lookback_steps, len(feature_columns)), dtype=np.float32)
+        y_val = np.empty((0, future_steps), dtype=np.float32)
+        val_input_dates = np.empty((0,), dtype=train_input_dates_full.dtype)
+
+    # Validate that train and validation subsets are not empty
+    if len(X_train) == 0:
+        raise ValueError(
+            f"The training subset is empty after splitting. "
+            f"Please adjust validation_ratio (current: {validation_ratio}) or check dataset size."
+        )
+    if validation_ratio > 0.0 and len(X_val) == 0:
+        raise ValueError(
+            f"The validation subset is empty after splitting. "
+            f"Please adjust validation_ratio (current: {validation_ratio}) or check dataset size."
+        )
+
+    # Shuffling only the final training subset (if requested)
+    if shuffle:
+        X_train, y_train, train_input_dates = shuffle_training_samples(
+            X_train, y_train, train_input_dates
+        )
 
     # --------------------------------------------------------------------------
     # Phase 5: Fit scalers on training data only
@@ -700,10 +747,13 @@ def load_and_process_data(
         "df": df.copy(),
         "X_train_unscaled": X_train.copy(),
         "y_train_unscaled": y_train.copy(),
+        "X_val_unscaled": X_val.copy(),
+        "y_val_unscaled": y_val.copy(),
         "X_test_unscaled": X_test.copy(),
         "y_test_unscaled": y_test.copy(),
-        "train_input_dates": split_data["train_input_dates"],
-        "test_input_dates": split_data["test_input_dates"],
+        "train_input_dates": train_input_dates,
+        "val_input_dates": val_input_dates,
+        "test_input_dates": test_input_dates,
     }
 
     last_sequence_unscaled = df[feature_columns].tail(lookback_steps).values
@@ -721,6 +771,14 @@ def load_and_process_data(
             feature_columns=feature_columns,
             scalers=column_scaler,
         )
+
+        if len(X_val) > 0:
+            X_val, y_val = scale_sequences(
+                X=X_val,
+                y=y_val,
+                feature_columns=feature_columns,
+                scalers=column_scaler,
+            )
 
         X_test, y_test = scale_sequences(
             X=X_test,
@@ -749,12 +807,13 @@ def load_and_process_data(
                     "split_date": split_date,
                     "split_by_date": split_by_date,
                     "split_ratio": split_ratio,
+                    "validation_ratio": validation_ratio,
                     "lookback_steps": lookback_steps,
                     "forecast_offset": forecast_offset,
                     "future_steps": future_steps,
                     "feature_columns": feature_columns,
                     "target_column": TARGET_COLUMN,
-                    "fitted_on": "training samples only",
+                    "fitted_on": "training samples only (excluding validation/test)",
                 },
             )
     else:
@@ -763,7 +822,7 @@ def load_and_process_data(
     # --------------------------------------------------------------------------
     # Phase 6: Build test dataframe aligned with prediction input dates
     # --------------------------------------------------------------------------
-    test_df = df.loc[split_data["test_input_dates"]].copy()
+    test_df = df.loc[test_input_dates].copy()
     test_df = test_df[~test_df.index.duplicated(keep="first")]
 
     # --------------------------------------------------------------------------
@@ -773,18 +832,23 @@ def load_and_process_data(
         {
             "X_train": X_train,
             "y_train": y_train,
+            "X_val": X_val,
+            "y_val": y_val,
             "X_test": X_test,
             "y_test": y_test,
             "test_df": test_df,
             "last_sequence": last_sequence.astype(np.float32),
             "target_columns": target_columns,
             "target_date_columns": target_date_columns,
+            "validation_dates": val_input_dates,
         }
     )
 
     print("[Data Pipeline] Completed leakage-aware data processing.")
     print(f"[Data Pipeline] X_train: {result['X_train'].shape}")
     print(f"[Data Pipeline] y_train: {result['y_train'].shape}")
+    print(f"[Data Pipeline] X_val:   {result['X_val'].shape}")
+    print(f"[Data Pipeline] y_val:   {result['y_val'].shape}")
     print(f"[Data Pipeline] X_test:  {result['X_test'].shape}")
     print(f"[Data Pipeline] y_test:  {result['y_test'].shape}")
 

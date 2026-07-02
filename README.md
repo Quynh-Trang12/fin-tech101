@@ -44,8 +44,8 @@ fin-tech101/
 ├── references/                 # Original Option C codebases
 ├── data/                       # Cached datasets
 ├── docs/                       # Assignment resources
-├── results/                    # Generated artefacts
-├── csv-results/                # Evaluation outputs
+├── results/                    # Generated artefacts (c1-c6 weights/plots)
+├── csv-results/                # Evaluation outputs (c1, c4, c5, c6 CSVs)
 ├── src/                        # Core pipeline
 │   ├── utils/                  # Shared utilities
 │   │   ├── __init__.py         # Package marker
@@ -59,7 +59,9 @@ fin-tech101/
 │   ├── test.py                 # Model evaluation
 │   ├── base_sweep.py           # Sweep framework
 │   ├── run_c4_sweeps.py        # Hyperparameter sweeps
-│   └── run_c5_sweeps.py        # Advanced forecasting
+│   ├── run_c5_sweeps.py        # Advanced forecasting
+│   ├── run_c6_ensemble.py      # Preliminary ensembling experiments
+│   └── run_c6_hybrid.py        # Hybrid residual-learning sweeps
 ├── requirements.txt            # Project dependencies
 └── README.md                   # You are here
 ```
@@ -163,6 +165,15 @@ python src/run_c5_sweeps.py
 **Primary Output**
 `results/c5/`: Multivariate and multi-step forecasting experiment results.
 
+
+### 11. Run Hybrid Residual-Learning Experiments
+```bash
+python src/run_c6_hybrid.py
+```
+**Primary Output**
+* `results/c6/`: Dedicated LSTM weights, ARIMA + hybrid prediction plots, and summary.
+* `csv-results/c6/`: Consolidated evaluation and simulated trading metrics CSV.
+
 ---
 
 ## 📔 Option C Task Mapping
@@ -176,7 +187,7 @@ The table below maps each Project Option C task to its primary implementation an
 | **C.3 Data Visualisation**   | `src/visualization.py`                                                                             | Candlestick charts and moving boxplots                                             |
 | **C.4 Deep Learning Models** | `src/model_factory.py`, `src/train.py`, `src/test.py`, `src/base_sweep.py`, `src/run_c4_sweeps.py` | Trained model weights, prediction results, evaluation metrics, and sweep summaries |
 | **C.5 Advanced Forecasting** | `src/data_processing.py`, `src/test.py`, `src/run_c5_sweeps.py`                                    | Multivariate and multi-step forecasting experiment results                         |
-| **C.6 Ensemble Learning**    | *(Planned)*                                                                                        | Ensemble learning experiments and evaluation results                               |
+| **C.6 Ensemble Learning**    | `src/run_c6_hybrid.py`, `src/run_c6_ensemble.py`                                                   | Hybrid residual-learning weights, plots, and consolidated metrics CSV              |
 | **C.7 Independent Research** | *(Planned)*                                                                                        | Research extension implementation and supporting artefacts                         |
 
 ---

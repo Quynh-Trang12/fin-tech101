@@ -14,6 +14,7 @@ import pandas as pd
 
 from test import test_model
 from train import train_model
+from config import VALIDATION_RATIO
 
 # ==============================================================================
 # PARAMETER REFLECTION UTILITIES
@@ -64,6 +65,7 @@ class BaseSweepRunner(ABC):
         split_date: str,
         dropout: float = 0.3,
         subfolder: str = "",
+        validation_ratio: float = VALIDATION_RATIO,
     ) -> None:
         """
         Initializes the base sweep runner with shared configuration parameters.
@@ -74,6 +76,8 @@ class BaseSweepRunner(ABC):
             end_date: Dataset end date.
             split_date: Training/testing chronological split date.
             dropout: Dropout regularization rate.
+            subfolder: Results output subfolder.
+            validation_ratio: Chronological validation split ratio relative to training set.
         """
         self.ticker = ticker
         self.start_date = start_date
@@ -81,6 +85,7 @@ class BaseSweepRunner(ABC):
         self.split_date = split_date
         self.dropout = dropout
         self.subfolder = subfolder
+        self.validation_ratio = validation_ratio
 
     def get_extra_global_params(self) -> dict[str, Any]:
         """Return subclass-specific parameters shared by all sweep configurations."""
@@ -99,6 +104,7 @@ class BaseSweepRunner(ABC):
             "split_date": self.split_date,
             "dropout": self.dropout,
             "subfolder": self.subfolder,
+            "validation_ratio": self.validation_ratio,
             **self.get_extra_global_params(),
         }
 
@@ -197,10 +203,26 @@ class BaseSweepRunner(ABC):
         # Phase 3: Print terminal comparison table
         # ----------------------------------------------------------------------
         print("\nSummary Table:")
-        try:
-            print(df_results.to_markdown(index=False))
-        except ImportError:
-            print(df_results.to_string(index=False))
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.width", 200)
+        pd.set_option("display.expand_frame_repr", False)
+
+        rename_mapping = {
+            "Model Name": "Model",
+            "Cell Type": "Cell",
+            "Layers": "L",
+            "Units": "Units",
+            "Batch Size": "Batch",
+            "Unscaled MAE ($)": "MAE",
+            "Unscaled RMSE ($)": "RMSE",
+            "Unscaled MAPE (%)": "MAPE",
+            "Directional Acc (%)": "Dir Acc",
+            "Trading Acc (%)": "Trade Acc",
+            "Total Trading Profit ($)": "Profit",
+            "Profit per Trade ($)": "$/Trade",
+        }
+        display_df = df_results.rename(columns=rename_mapping)
+        print(display_df.to_string(index=False))
 
     def run_sweep(
         self,
