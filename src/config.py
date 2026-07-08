@@ -114,7 +114,7 @@ C4_SWEEP_CONFIGS = {
 # TASK C.5 MULTIVARIATE & MULTISTEP EXPERIMENT CONFIGURATIONS
 # ==============================================================================
 C5_SWEEP_CONFIGS = {
-    "lstm_uni_multistep": {
+    "gru_uni_multistep": {
         "description": "Univariate Multistep (Close Only -> 5 Days Forecast)",
         "feature_columns": ["adjclose"],
         "future_steps": 5,
@@ -122,9 +122,9 @@ C5_SWEEP_CONFIGS = {
         "batch_size": 64,
         "units": 128,
         "n_layers": 2,
-        "cell_type": "LSTM",
+        "cell_type": "GRU",
     },
-    "lstm_multi_singlestep": {
+    "gru_multi_singlestep": {
         "description": "Multivariate Single-Step (All Features -> 1 Day Forecast)",
         "feature_columns": FEATURE_COLUMNS,
         "future_steps": 1,
@@ -132,9 +132,9 @@ C5_SWEEP_CONFIGS = {
         "batch_size": 64,
         "units": 128,
         "n_layers": 2,
-        "cell_type": "LSTM",
+        "cell_type": "GRU",
     },
-    "lstm_multi_multistep": {
+    "gru_multi_multistep": {
         "description": "Multivariate Multistep Combined (All Features -> 5 Days Forecast)",
         "feature_columns": FEATURE_COLUMNS,
         "future_steps": 5,
@@ -142,6 +142,6 @@ C5_SWEEP_CONFIGS = {
         "batch_size": 64,
         "units": 128,
         "n_layers": 2,
-        "cell_type": "LSTM",
+        "cell_type": "GRU",
     },
 }

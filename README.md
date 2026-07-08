@@ -10,7 +10,7 @@ The project was developed for **COS30018 – Intelligent Systems (Project Option
 
 ## 🎯 Objectives and Key Capabilities
 
-The objective of FinTech101 is to investigate how different deep learning approaches influence stock price forecasting while building a reusable project that supports fair, reproducible, and extensible experiments. Each completed Option C task contributes a new capability that becomes part of the shared stock forecasting workflow.
+The objective of FinTech101 is to investigate how different statistical and deep learning forecasting approaches influence stock price prediction while building a reusable project that supports fair, reproducible, and extensible machine learning experiments.
 
 ### 1. Reusable Experiment Pipeline
 
@@ -167,12 +167,23 @@ python src/run_c5_sweeps.py
 
 
 ### 11. Run Hybrid Residual-Learning Experiments
+
 ```bash
 python src/run_c6_hybrid.py
 ```
-**Primary Output**
-* `results/c6/`: Dedicated LSTM weights, ARIMA + hybrid prediction plots, and summary.
-* `csv-results/c6/`: Consolidated evaluation and simulated trading metrics CSV.
+
+**Primary Outputs**
+
+- `results/c6/`
+  - Residual-learning LSTM model weights
+  - ARIMA baseline prediction plots
+  - Hybrid residual-learning prediction plots
+  - Experiment summary (`c6_hybrid_summary.md`)
+
+- `csv-results/c6/`
+  - Consolidated forecasting evaluation metrics
+  - Simulated trading performance metrics
+
 
 ---
 
@@ -187,7 +198,7 @@ The table below maps each Project Option C task to its primary implementation an
 | **C.3 Data Visualisation**   | `src/visualization.py`                                                                             | Candlestick charts and moving boxplots                                             |
 | **C.4 Deep Learning Models** | `src/model_factory.py`, `src/train.py`, `src/test.py`, `src/base_sweep.py`, `src/run_c4_sweeps.py` | Trained model weights, prediction results, evaluation metrics, and sweep summaries |
 | **C.5 Advanced Forecasting** | `src/data_processing.py`, `src/test.py`, `src/run_c5_sweeps.py`                                    | Multivariate and multi-step forecasting experiment results                         |
-| **C.6 Ensemble Learning**    | `src/run_c6_hybrid.py`, `src/run_c6_ensemble.py`                                                   | Hybrid residual-learning weights, plots, and consolidated metrics CSV              |
+| **C.6 Ensemble Learning**    | `src/run_c6_hybrid.py`, `src/run_c6_ensemble.py`                                                   | Hybrid residual-learning forecasting pipeline, prediction plots, model weights, and consolidated evaluation metrics.              |
 | **C.7 Independent Research** | *(Planned)*                                                                                        | Research extension implementation and supporting artefacts                         |
 
 ---

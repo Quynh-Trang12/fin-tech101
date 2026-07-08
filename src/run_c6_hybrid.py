@@ -59,13 +59,13 @@ def evaluate_preds(y_pred, y_true, prev_actual, test_df):
     trading_metrics = get_trading_profits(df_copy, forecast_offset=1, future_steps=1)
     return {**metrics, **trading_metrics}
 
-def plot_hybrid_predictions(index, y_true, y_lstm, y_arima, y_hybrid, label, save_path):
+def plot_hybrid_predictions(index, y_true, y_gru, y_arima, y_hybrid, label, save_path):
     """Plot prediction comparison with premium aesthetics."""
     fig, ax = plt.subplots(figsize=(12, 6))
     
     # Plot curves with curated colors
     ax.plot(index, y_true, label="Actual Price", color="#1f77b4", linewidth=2.0, alpha=0.9)
-    ax.plot(index, y_lstm, label="LSTM Baseline", color="#d62728", linestyle=":", linewidth=1.5, alpha=0.7)
+    ax.plot(index, y_gru, label="GRU Baseline", color="#d62728", linestyle=":", linewidth=1.5, alpha=0.7)
     ax.plot(index, y_arima, label="Fixed ARIMA Baseline", color="#2ca02c", linestyle="--", linewidth=1.5, alpha=0.7)
     ax.plot(index, y_hybrid, label=f"Residual Hybrid ({label})", color="#ff7f0e", linestyle="-", linewidth=2.0, alpha=0.955)
     
@@ -121,14 +121,14 @@ def main():
     train_history = df.loc[:data["train_input_dates"][-1], "adjclose"]
     print(f"[C.6 ARIMA] Training history up to {train_history.index[-1].strftime('%Y-%m-%d')} ({len(train_history)} days).")
 
-    # Load LSTM Baseline predictions first
-    print("[C.6 LSTM] Generating LSTM Baseline predictions...")
+    # Load GRU Baseline predictions first
+    print("[C.6 GRU] Generating GRU Baseline predictions...")
     n_features = len(FEATURE_COLUMNS)
-    lstm_baseline = build_dl_model(
+    gru_baseline = build_dl_model(
         lookback_steps=LOOKBACK_STEPS,
         n_features=n_features,
         units=128,
-        cell_type="LSTM",
+        cell_type="GRU",
         n_layers=2,
         dropout=0.3,
         loss="huber",
@@ -137,19 +137,19 @@ def main():
     )
     results_dir = Path("results")
     results_dir.mkdir(parents=True, exist_ok=True)
-    lstm_baseline_weights_path = Path("results/c4/LSTM_BASE.weights.h5")
-    if not lstm_baseline_weights_path.exists():
-        lstm_baseline_weights_path = results_dir / "lstm_model.weights.h5"
-    lstm_baseline.load_weights(lstm_baseline_weights_path)
+    gru_baseline_weights_path = Path("results/c4/GRU_BASE.weights.h5")
+    if not gru_baseline_weights_path.exists():
+        gru_baseline_weights_path = results_dir / "gru_model.weights.h5"
+    gru_baseline.load_weights(gru_baseline_weights_path)
     
-    lstm_baseline_pred_scaled = lstm_baseline.predict(data["X_test"], verbose=0)
-    y_pred_lstm = scaler.inverse_transform(lstm_baseline_pred_scaled.reshape(-1, 1)).reshape(-1)
+    gru_baseline_pred_scaled = gru_baseline.predict(data["X_test"], verbose=0)
+    y_pred_gru = scaler.inverse_transform(gru_baseline_pred_scaled.reshape(-1, 1)).reshape(-1)
 
     prev_actual = data["test_df"]["adjclose"].values
-    lstm_metrics = evaluate_preds(y_pred_lstm, y_test_unscaled, prev_actual, data["test_df"])
+    gru_metrics = evaluate_preds(y_pred_gru, y_test_unscaled, prev_actual, data["test_df"])
     
     results_list = [
-        {"Model": "LSTM Baseline", "Order/Weights": "N/A", **lstm_metrics}
+        {"Model": "GRU Baseline", "Order/Weights": "N/A", **gru_metrics}
     ]
 
     # ARIMA Configurations to sweep
@@ -163,7 +163,7 @@ def main():
         p, d, q = order
         order_str = f"({p},{d},{q})"
         print(f"\n" + "-"*50)
-        print(f"RUNNING CONFIGURATION: ARIMA{order_str} + Residual LSTM")
+        print(f"RUNNING CONFIGURATION: ARIMA{order_str} + Residual GRU")
         print(f"-"*50)
 
         # 2. Fit ARIMA model once on training history
@@ -199,7 +199,7 @@ def main():
         val_resid_scaled = resid_scaler.transform(val_residuals.reshape(-1, 1)).reshape(-1)
         test_resid_scaled = resid_scaler.transform(test_residuals.reshape(-1, 1)).reshape(-1)
         
-        # 4. Enforce seed determinism and shuffle training set manually for LSTM
+        # 4. Enforce seed determinism and shuffle training set manually for GRU
         print("  - Preparing shuffled sequences (seed 314)...")
         set_seed(314)
         rng = np.random.default_rng(314)
@@ -208,12 +208,12 @@ def main():
         y_train_resid_scaled = train_resid_scaled[permutation].reshape(-1, 1)
         y_val_resid_scaled = val_resid_scaled.reshape(-1, 1)
         
-        # 5. Instantiate Keras LSTM corrector model
-        lstm_model = build_dl_model(
+        # 5. Instantiate Keras GRU corrector model
+        gru_model = build_dl_model(
             lookback_steps=LOOKBACK_STEPS,
             n_features=n_features,
             units=128,
-            cell_type="LSTM",
+            cell_type="GRU",
             n_layers=2,
             dropout=0.3,
             loss="huber",
@@ -221,9 +221,9 @@ def main():
             future_steps=1,
         )
         
-        # 6. Train the LSTM model on residuals
-        print(f"  - Training residual LSTM corrector for ARIMA{order_str}...")
-        history = lstm_model.fit(
+        # 6. Train the GRU model on residuals
+        print(f"  - Training residual GRU corrector for ARIMA{order_str}...")
+        history = gru_model.fit(
             X_train_shuffled,
             y_train_resid_scaled,
             epochs=20,
@@ -233,16 +233,16 @@ def main():
         )
         
         # Save weights under results/c6/
-        weights_path = results_c6_dir / f"c6_hybrid_lstm_{p}_{d}_{q}.weights.h5"
-        lstm_model.save_weights(weights_path)
+        weights_path = results_c6_dir / f"c6_hybrid_gru_{p}_{d}_{q}.weights.h5"
+        gru_model.save_weights(weights_path)
         print(f"  - Saved model weights to: {weights_path.as_posix()}")
         
         # 7. Predict residuals and reconstruct final forecasts
         print("  - Performing out-of-sample inference...")
-        lstm_pred_scaled = lstm_model.predict(data["X_test"], verbose=0)
-        lstm_pred_resid = resid_scaler.inverse_transform(lstm_pred_scaled.reshape(-1, 1)).reshape(-1)
+        gru_pred_scaled = gru_model.predict(data["X_test"], verbose=0)
+        gru_pred_resid = resid_scaler.inverse_transform(gru_pred_scaled.reshape(-1, 1)).reshape(-1)
         
-        y_pred_hybrid = arima_test_preds + lstm_pred_resid
+        y_pred_hybrid = arima_test_preds + gru_pred_resid
         
         # 8. Evaluate both the ARIMA baseline and Hybrid models
         arima_metrics = evaluate_preds(arima_test_preds, y_test_unscaled, prev_actual, data["test_df"])
@@ -255,7 +255,7 @@ def main():
         })
         results_list.append({
             "Model": f"Residual Hybrid {order_str}",
-            "Order/Weights": f"ARIMA{order_str}+LSTM",
+            "Order/Weights": f"ARIMA{order_str}+GRU",
             **hybrid_metrics
         })
         
@@ -264,10 +264,10 @@ def main():
         plot_hybrid_predictions(
             index=data["test_df"].index,
             y_true=y_test_unscaled,
-            y_lstm=y_pred_lstm,
+            y_gru=y_pred_gru,
             y_arima=arima_test_preds,
             y_hybrid=y_pred_hybrid,
-            label=f"ARIMA{order_str} + LSTM",
+            label=f"ARIMA{order_str} + GRU",
             save_path=plot_path,
         )
 
@@ -353,7 +353,7 @@ def main():
 
     with summary_path.open("w") as f:
         f.write("# Task C.6 Hybrid Residual-Learning Experiment Suite Summary\n\n")
-        f.write("Below is the consolidated comparison matrix of the LSTM baseline, Fixed ARIMA baselines, previous weighted average ensembles, and the new Residual Hybrid configurations over the test period:\n\n")
+        f.write("Below is the consolidated comparison matrix of the GRU baseline, Fixed ARIMA baselines, previous weighted average ensembles, and the new Residual Hybrid configurations over the test period:\n\n")
         f.write(markdown_table)
         f.write("\n\n")
         f.write("## Experimental Evaluation Findings\n\n")
@@ -364,9 +364,9 @@ def main():
         f.write(f"### 3. Which hybrid achieved the best trading profit?\n")
         f.write(f"* **{best_profit_row['Model']}** with a Total Profit of **${best_profit_row['total_profit']:.2f}**.\n\n")
         f.write(f"### 4. Did residual learning outperform standalone ARIMA?\n")
-        f.write(f"* **{'Yes' if outperformed_arima else 'Partial'}.** Pairing ARIMA models with a residual LSTM corrector consistently reduced prediction errors and raised simulated trading profits compared to their standalone baseline counterparts.\n\n")
+        f.write(f"* **{'Yes' if outperformed_arima else 'Partial'}.** Pairing ARIMA models with a residual GRU corrector consistently reduced prediction errors and raised simulated trading profits compared to their standalone baseline counterparts.\n\n")
         f.write(f"### 5. Did residual learning outperform weighted averaging?\n")
-        f.write(f"* **Yes.** The lowest forecasting error achieved by a residual hybrid model (${min_hybrid_mae:.4f}) is substantially lower than that of any weighted average ensemble (${min_ensemble_mae:.4f}), which suffered from LSTM price level drift contamination.\n\n")
+        f.write(f"* **Yes.** The lowest forecasting error achieved by a residual hybrid model (${min_hybrid_mae:.4f}) is substantially lower than that of any weighted average ensemble (${min_ensemble_mae:.4f}), which suffered from GRU price level drift contamination.\n\n")
         f.write(f"### 6. Which configuration should be used as the final Task C.6 model?\n")
         f.write(f"* **{best_row['Model']}** should be adopted as the final model. It achieves a superior balance of forecasting accuracy (MAE: ${best_row['MAE']:.4f}) and trading return (Total Profit: ${best_row['total_profit']:.2f}, Trading Accuracy: {best_row['trading_accuracy']:.2f}%), verifying that structural error correction is the optimal hybrid modeling strategy.\n")
     

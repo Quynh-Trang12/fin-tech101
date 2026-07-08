@@ -1,291 +1,265 @@
 # 1. Hybrid Forecasting Methodology
 
-## 1.1 Overall Hybrid Forecasting Pipeline
+## 1.1 Motivation
 
-Task C.6 extends the forecasting framework developed in previous tasks by investigating whether combining classical statistical forecasting with deep learning can improve stock price prediction accuracy.
+Tasks C.4 and C.5 demonstrated that the **GRU** architecture provides strong forecasting performance for stock price prediction. However, the experiments also showed that deep learning models alone do not consistently produce profitable trading decisions. Although the GRU model captures complex nonlinear patterns in historical market data, its predictions may drift over time and struggle to model short-term linear price movements.
 
-Rather than relying on a single forecasting model, the implementation introduces a hybrid forecasting pipeline consisting of a fixed-parameter ARIMA model and a residual-learning LSTM. The ARIMA model is responsible for modelling the primary linear temporal structure of the stock price series, while the LSTM is trained to predict the remaining forecasting errors (residuals) that are not captured by the statistical model.
+Classical statistical models such as **ARIMA (AutoRegressive Integrated Moving Average)** offer complementary strengths. ARIMA models are designed to capture linear temporal relationships and short-term autocorrelations in time series data. They are computationally efficient and often perform well for one-step-ahead forecasting, but they are less capable of modelling complex nonlinear market behaviour.
 
-The complete forecasting workflow consists of the following stages:
+These complementary characteristics motivate the use of **hybrid forecasting**, where statistical and deep learning models are combined in an attempt to exploit the strengths of both approaches. Rather than replacing one model with another, the objective is to investigate whether combining ARIMA and GRU can improve forecasting accuracy and trading performance beyond what either model achieves individually.
 
-1. Historical stock data is loaded and preprocessed.
-2. The dataset is divided chronologically into training, validation, and testing subsets.
-3. A fixed-parameter ARIMA model is trained using only the training subset.
-4. One-step-ahead ARIMA forecasts are generated for the training, validation, and testing periods.
-5. Residuals are computed as the difference between the observed prices and the ARIMA predictions.
-6. The residual series is used as the learning target for the LSTM model.
-7. During inference, the LSTM predicts the expected residual, which is added to the ARIMA prediction to produce the final forecast.
-8. The reconstructed forecasts are evaluated using the independent testing dataset.
+Two ensemble strategies are investigated in this task:
 
-This methodology preserves the chronological nature of financial time-series data while maintaining strict separation between the training, validation, and testing datasets to prevent information leakage.
+1. **Weighted Ensemble**, which combines the predictions of ARIMA and GRU using weighted averaging.
+2. **Residual Learning**, which allows the GRU model to learn and correct the forecasting errors produced by ARIMA.
 
 ---
 
-## 1.2 Fixed-Parameter ARIMA Forecasting
+## 1.2 Weighted Ensemble
 
-Unlike the initial prototype investigated during development, the final implementation adopts a **fixed-parameter ARIMA** evaluation protocol.
+The first approach combines the predictions of the GRU model and the ARIMA model using a weighted average. Instead of relying entirely on one forecasting model, the final prediction is calculated as a weighted combination of both predictions:
 
-The ARIMA model is fitted once using only the chronological training subset. After training, the model parameters remain fixed throughout validation and testing. No parameter updates or retraining occur after the testing period begins.
+\[
+\hat{y}=w_{GRU}\hat{y}_{GRU}+w_{ARIMA}\hat{y}_{ARIMA}
+\]
 
-This evaluation protocol is consistent with the methodology used throughout previous tasks, where deep learning models are trained once and evaluated on an independent testing dataset. Using a fixed ARIMA baseline ensures that both statistical and deep learning models are compared under equivalent forecasting conditions.
+where:
+
+- \(\hat{y}_{GRU}\) is the prediction produced by the GRU model,
+- \(\hat{y}_{ARIMA}\) is the prediction produced by the ARIMA model,
+- \(w_{GRU}\) and \(w_{ARIMA}\) are weighting coefficients satisfying
+
+\[
+w_{GRU}+w_{ARIMA}=1.
+\]
+
+Three fixed ARIMA configurations—ARIMA(1,1,1), ARIMA(2,1,2), and ARIMA(5,1,0)—were evaluated. For each ARIMA model, three weighting combinations (50:50, 70:30, and 30:70) were tested to investigate whether simple linear averaging could improve prediction performance.
 
 ---
 
 ## 1.3 Residual Learning
 
-Instead of training the LSTM to predict absolute stock prices directly, the proposed hybrid approach trains the network to predict the forecasting residuals produced by the ARIMA model.
+The second approach uses **residual learning**, which combines the strengths of both forecasting models in a different way.
 
-For each observation, the residual is defined as
-
-\[
-e_t = y_t - \hat{y}_{ARIMA,t}
-\]
-
-where:
-
-- \(y_t\) is the observed adjusted closing price;
-- \(\hat{y}_{ARIMA,t}\) is the prediction generated by the fixed ARIMA model.
-
-The LSTM therefore learns only the remaining nonlinear forecasting error rather than the complete stock price trajectory.
-
-During inference, the final prediction is reconstructed as
+Instead of averaging two independent predictions, the ARIMA model first generates an initial forecast. The prediction error (or **residual**) is then calculated as
 
 \[
-\hat{y}_{final,t}
-=
-\hat{y}_{ARIMA,t}
-+
-\hat{e}_{LSTM,t}
+Residual = Actual\ Price - ARIMA\ Prediction.
 \]
 
-where \(\hat{e}_{LSTM,t}\) denotes the residual predicted by the LSTM.
+A GRU model is subsequently trained to predict these residual values rather than the stock prices directly. During inference, the predicted residual is added back to the ARIMA forecast to obtain the final prediction:
 
-By allowing each model to specialise in different aspects of the forecasting problem, the hybrid model seeks to combine the strengths of classical statistical forecasting with deep learning while avoiding the limitations observed in simple prediction averaging.
+\[
+Final\ Prediction = ARIMA\ Prediction + Predicted\ Residual.
+\]
 
----
+This approach allows ARIMA to model the underlying linear behaviour of the stock price while the GRU learns the remaining nonlinear patterns that ARIMA cannot capture. By focusing only on the residual errors, the GRU solves a simpler learning problem than predicting the entire stock price series from scratch.
+
+The overall workflow of the residual-learning approach is illustrated below.
+
+```text
+Historical Stock Data
+          │
+          ▼
+      ARIMA Model
+          │
+          ▼
+   Initial Forecast
+          │
+          ├───────────────┐
+          │               │
+          ▼               │
+Compute Residuals          │
+(Actual − ARIMA)           │
+          │               │
+          ▼               │
+     Train GRU            │
+      on Residuals        │
+          │               │
+          ▼               │
+ Predict Residuals         │
+          │               │
+          └──────┬────────┘
+                 ▼
+      Final Prediction
+ = ARIMA + Predicted Residual
+```
 
 # 2. Experimental Design
 
-The objective of Task C.6 is to investigate whether ensemble learning improves forecasting performance over individual forecasting models. Two ensemble strategies were evaluated during the experiments.
+## 2.1 Shared Experimental Setup
 
-The first strategy employed **weighted prediction averaging**, where the predictions produced by the LSTM and ARIMA models were combined using predefined weighting factors. Three weighting schemes (30/70, 50/50, and 70/30) were evaluated using three fixed-parameter ARIMA configurations.
+To ensure a fair comparison, all ensemble and hybrid forecasting experiments were conducted using the same dataset, preprocessing pipeline, and evaluation procedure established in the previous tasks. The only differences between experiments were the ARIMA model order and the forecasting strategy (weighted ensemble or residual learning).
 
-Experimental results showed that every weighted ensemble performed worse than the corresponding standalone ARIMA model. Increasing the contribution of the LSTM consistently increased forecasting error, indicating that simple linear averaging was unable to exploit the complementary strengths of the two models.
+The GRU architecture selected in Task C.4 was retained as the deep learning component throughout all experiments.
 
-Based on these findings, a second ensemble strategy based on **residual learning** was developed. Rather than predicting the stock price directly, the LSTM was trained to predict the forecasting residuals generated by the ARIMA model. This approach allows the ARIMA model to capture the primary linear temporal structure while the LSTM focuses on modelling nonlinear forecasting errors.
-
-Three hybrid configurations were subsequently evaluated.
-
-| Configuration | Statistical Model | Deep Learning Model | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Hybrid(1,1,1)** | ARIMA(1,1,1) | Residual LSTM | Evaluate residual correction using the best forecasting ARIMA baseline. |
-| **Hybrid(2,1,2)** | ARIMA(2,1,2) | Residual LSTM | Evaluate whether a higher-order ARIMA model benefits from nonlinear residual correction. |
-| **Hybrid(5,1,0)** | ARIMA(5,1,0) | Residual LSTM | Evaluate residual correction for an autoregressive ARIMA configuration. |
-
-All hybrid experiments shared the same training configuration.
+The shared experimental settings are summarised in Table 2.1.
 
 | Parameter | Value |
-| :--- | :--- |
-| Statistical Model | Fixed-Parameter ARIMA |
-| Deep Learning Model | Two-layer LSTM |
-| Input Features | Adjusted Close, Open, High, Low, Volume |
-| Target | ARIMA Forecast Residual |
-| Lookback Window | 50 Trading Days |
-| Forecast Horizon | 1 Trading Day |
+| :-------- | :---- |
+| Dataset | Commonwealth Bank of Australia (CBA.AX) |
+| Deep Learning Model | GRU |
+| Number of GRU Layers | 2 |
+| Hidden Units | 128 |
+| Lookback Window | 50 trading days |
+| Forecast Offset | 1 trading day |
+| Input Features | Adjusted Close, Volume, Open, High, Low |
+| Optimizer | Adam |
 | Loss Function | Huber Loss |
 | Epochs | 20 |
 | Batch Size | 64 |
 
-All experiments were trained using the same chronological train–validation–test partition established in previous tasks. Feature scaling, residual scaling, and model fitting were performed exclusively using the training subset, while the validation subset was used for monitoring model performance during training. Final evaluation was conducted only on the independent testing dataset, ensuring a fair comparison across all forecasting strategies.
-
-# 3. Experimental Results & Discussion
-
-The Task C.6 experiments were conducted in two stages. The first stage evaluated conventional weighted ensemble forecasting by combining fixed-parameter ARIMA and LSTM predictions using weighted averaging. Based on the experimental findings, a second stage investigated a hybrid residual-learning approach in which the LSTM was trained to predict the forecasting errors produced by the ARIMA model.
+The historical dataset was divided chronologically into training, validation, and testing subsets using the finalized preprocessing pipeline developed in the previous tasks. A **15% validation split** was created from the training data to monitor model performance during training, while all reported evaluation metrics were computed using the independent testing dataset. This chronological evaluation protocol prevents information leakage and provides a fair comparison between all forecasting methods.
 
 ---
 
-## 3.1 Weighted Averaging Ensemble
+## 2.2 ARIMA Configurations
 
-The initial ensemble implementation combined the predictions of the LSTM and fixed-parameter ARIMA models using weighted linear averaging.
+Three fixed-parameter ARIMA models were evaluated as statistical forecasting baselines. The parameters of each ARIMA model were estimated once using the chronological training dataset and remained fixed throughout the testing period. This approach ensures that the statistical models are evaluated under the same conditions as the GRU model without repeatedly refitting the model during testing.
 
-Three weighting schemes (30/70, 50/50, and 70/30) were evaluated for each ARIMA configuration.
+The evaluated ARIMA configurations are summarised below.
 
-Across every experiment, the weighted ensembles produced larger prediction errors than their corresponding standalone ARIMA models. Increasing the contribution of the LSTM consistently increased the forecasting error, indicating that simple prediction averaging was unable to exploit complementary information between the statistical and deep learning models.
+| Model | Order | Description |
+| :---- | :---: | :---------- |
+| ARIMA(1,1,1) | (1,1,1) | Standard autoregressive and moving-average model after first-order differencing. |
+| ARIMA(2,1,2) | (2,1,2) | Higher-order autoregressive and moving-average model for capturing more complex temporal dependencies. |
+| ARIMA(5,1,0) | (5,1,0) | Autoregressive model with a longer historical memory and no moving-average component. |
 
-These findings suggest that averaging predictions from models with substantially different predictive accuracy may degrade overall performance by introducing the larger forecasting errors of the weaker model into the ensemble.
-
-Consequently, weighted averaging was not pursued further.
-
----
-
-## 3.2 Hybrid Residual-Learning Results
-
-A second ensemble strategy based on residual learning was subsequently implemented. Rather than predicting absolute stock prices, the LSTM was trained to predict the residual forecasting errors generated by the fixed-parameter ARIMA model.
-
-The reconstructed forecasts were evaluated using the same chronological testing dataset.
-
-| Model | MAE ($) | RMSE ($) | MAPE (%) | Directional Accuracy (%) | Trading Profit ($) |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| LSTM Baseline | *(from baseline)* | *(from baseline)* | *(from baseline)* | 45.69 | -21.36 |
-| ARIMA(1,1,1) | 0.7764 | *(see metrics CSV)* | *(see metrics CSV)* | 50.43 | +4.70 |
-| **Hybrid(1,1,1)** | **0.7693** | **Lowest** | **Lowest** | **54.74** | **+34.96** |
-| ARIMA(2,1,2) | 0.7729 | *(see metrics CSV)* | *(see metrics CSV)* | *(see metrics CSV)* | +10.35 |
-| **Hybrid(2,1,2)** | **0.7678** | Improved | Improved | Improved | +11.36 |
-| ARIMA(5,1,0) | 0.7804 | *(see metrics CSV)* | *(see metrics CSV)* | *(see metrics CSV)* | +0.59 |
-| **Hybrid(5,1,0)** | **0.7772** | Improved | Improved | Improved | +12.56 |
+These three configurations provide a representative comparison of different statistical forecasting models before combining them with the GRU network.
 
 ---
 
-## 3.3 Discussion
+## 2.3 Evaluation Metrics
 
-### 3.3.1 Weighted Averaging Did Not Improve Forecasting Performance
+Each forecasting model was evaluated using both prediction accuracy metrics and trading-oriented performance metrics.
 
-The experimental results demonstrated that simple weighted averaging was unable to improve upon the standalone ARIMA models.
+### Regression Metrics
 
-Although ensemble averaging is commonly used to combine multiple predictors, its effectiveness depends on the constituent models exhibiting comparable predictive performance while making different forecasting errors. In this project, the fixed-parameter ARIMA models consistently outperformed the standalone LSTM. Consequently, averaging the two predictions introduced additional forecasting error rather than reducing it.
+- **Mean Absolute Error (MAE):** Average absolute difference between predicted and actual stock prices.
+- **Root Mean Squared Error (RMSE):** Measures prediction error while placing greater emphasis on larger errors.
+- **Mean Absolute Percentage Error (MAPE):** Average percentage prediction error relative to the true stock price.
 
-These results indicate that conventional prediction averaging is not an appropriate ensemble strategy for the selected dataset.
+### Directional and Trading Metrics
 
----
+- **Directional Accuracy (DA):** Percentage of predictions that correctly identify whether the next stock price increases or decreases.
+- **Trading Accuracy:** Percentage of simulated trades that generate a positive return.
+- **Total Trading Profit:** Overall profit obtained from the simulated trading strategy across the testing period.
+- **Profit per Trade:** Average profit or loss generated by each simulated trade.
 
-### 3.3.2 Residual Learning Consistently Improved the ARIMA Baselines
+Using both regression and trading metrics provides a comprehensive evaluation of each forecasting strategy. While regression metrics measure numerical forecasting accuracy, trading metrics assess the practical usefulness of the predictions in a simple trading scenario. Considering both perspectives enables a more balanced comparison of the standalone, ensemble, and hybrid forecasting models.
 
-The residual-learning approach produced consistent improvements across every evaluated ARIMA configuration.
+# 3. Experimental Results and Discussion
 
-Rather than competing with the ARIMA model by independently predicting stock prices, the LSTM was trained to model only the nonlinear forecasting errors remaining after the statistical prediction had been generated. This division of responsibilities allowed each model to specialise in different aspects of the forecasting problem.
+## 3.1 Weighted Ensemble Results
 
-For every evaluated ARIMA configuration, the corresponding hybrid model achieved lower prediction errors than the standalone statistical model while also improving simulated trading performance.
+The first experiment investigated whether a simple weighted average of GRU and ARIMA predictions could improve forecasting performance. Three ARIMA configurations—ARIMA(1,1,1), ARIMA(2,1,2), and ARIMA(5,1,0)—were combined with the GRU model using three weighting schemes (50:50, 70:30, and 30:70).
 
----
+The experimental results are summarised in Table 3.1.
 
-### 3.3.3 Hybrid(1,1,1) Achieved the Best Overall Performance
+| Model | MAE ($) | RMSE ($) | MAPE (%) | DA (%) | Trading Accuracy (%) | Total Profit ($) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **GRU Baseline** | 2.2256 | 2.5751 | 2.120 | 44.83 | 44.83 | -22.59 |
+| **ARIMA(1,1,1)** | **1.0763** | **1.3473** | **1.038** | 49.14 | 49.14 | 4.39 |
+| ARIMA(2,1,2) | 1.0800 | 1.3497 | 1.041 | 50.00 | 50.00 | 4.16 |
+| ARIMA(5,1,0) | 1.0785 | 1.3521 | 1.041 | **50.43** | **50.43** | **8.63** |
+| Best Weighted Ensemble | 1.2420 | 1.5259 | 1.192 | 47.84 | 47.84 | -14.38 |
 
-Among all evaluated configurations, the **Hybrid(1,1,1)** model produced the strongest overall forecasting performance.
+The results show that all three ARIMA models substantially outperformed the standalone GRU model across every regression metric. Although the weighted ensembles achieved lower prediction errors than the GRU baseline, none of them surpassed the corresponding standalone ARIMA models.
 
-The model achieved:
+This behaviour is expected because weighted averaging combines the predictions of two complete forecasting models. Since the GRU model produced larger forecasting errors than ARIMA, averaging the two predictions introduced additional error into the final forecast rather than improving it.
 
-- the lowest MAE,
-- the lowest RMSE,
-- the lowest MAPE,
-- the highest directional accuracy (54.74%),
-- and the highest simulated trading profit (+$34.96).
-
-These results demonstrate that residual learning successfully combines the strengths of classical statistical forecasting and deep learning without the performance degradation observed in simple weighted averaging.
-
----
-
-### 3.3.4 Implications for Hybrid Forecasting
-
-The experiments suggest that deep learning contributes more effectively as a nonlinear error corrector than as an independent price predictor within a hybrid forecasting system.
-
-By allowing the ARIMA model to estimate the primary linear temporal structure while the LSTM focuses exclusively on the remaining nonlinear forecasting errors, the hybrid framework exploits the complementary strengths of both modelling paradigms.
-
-This finding represents the principal contribution of Task C.6 and establishes the hybrid residual-learning model as the preferred forecasting framework for subsequent project extensions.
+Consequently, simple weighted averaging was not an effective strategy for combining the statistical and deep learning models.
 
 ---
 
-# 4. Verification & Experimental Evidence
+## 3.2 Residual Learning Results
 
-## 4.1 Training and Experiment Verification
+The second experiment investigated residual learning, where the GRU model predicts only the forecasting errors (residuals) produced by ARIMA instead of predicting stock prices directly.
 
-The completed implementation was verified by executing the complete hybrid forecasting pipeline after integrating the residual-learning framework.
+The experimental results are summarised in Table 3.2.
 
-The following workflows executed successfully:
+| Model | MAE ($) | RMSE ($) | MAPE (%) | DA (%) | Trading Accuracy (%) | Total Profit ($) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fixed ARIMA(1,1,1) | 0.7764 | 0.9829 | 0.746 | 50.43 | 50.43 | 4.70 |
+| **Residual Hybrid (1,1,1)** | 0.7677 | **0.9772** | 0.738 | **56.03** | **56.03** | **36.97** |
+| Fixed ARIMA(2,1,2) | 0.7729 | 0.9852 | 0.744 | 51.29 | 51.29 | 10.35 |
+| **Residual Hybrid (2,1,2)** | **0.7666** | 0.9797 | **0.738** | 52.59 | 52.59 | 10.35 |
+| Fixed ARIMA(5,1,0) | 0.7804 | 0.9951 | 0.751 | 49.57 | 49.57 | 0.59 |
+| **Residual Hybrid (5,1,0)** | 0.7757 | 0.9908 | 0.746 | 52.16 | 52.16 | 12.01 |
 
-- Fixed-parameter ARIMA training.
-- Residual dataset generation.
-- Residual-learning LSTM training.
-- Hybrid prediction reconstruction.
-- Complete C.6 experiment sweep.
+Unlike weighted averaging, the residual-learning approach consistently improved the forecasting performance of every ARIMA configuration. For all three ARIMA models, the hybrid approach reduced MAE, RMSE, and MAPE while also increasing Directional Accuracy.
 
-Verification confirmed that:
+Among the evaluated models, **Residual Hybrid (2,1,2)** achieved the lowest regression errors (MAE = **0.7666**, RMSE = **0.9797**, MAPE = **0.738%**), indicating the highest numerical forecasting accuracy.
 
-- chronological train, validation, and test separation was preserved throughout the pipeline;
-- ARIMA parameters were estimated exclusively using the training subset;
-- feature scalers and residual scalers were fitted only on the training data;
-- no information leakage occurred between training, validation, and testing datasets;
-- all hybrid configurations completed successfully without runtime errors;
-- prediction plots, evaluation metrics, and consolidated experiment summaries were generated automatically.
-
-The terminal execution is shown below.
-
-![Task C.6 Terminal Execution](screenshots/c6_terminal.png)
+However, **Residual Hybrid (1,1,1)** achieved the highest Directional Accuracy (**56.03%**) and the largest simulated trading profit (**$36.97**), while maintaining regression performance that was nearly identical to the best-performing model. These results suggest that small improvements in numerical prediction error do not necessarily translate into better trading performance.
 
 ---
 
-## 4.2 Prediction Comparison
+## 3.3 Overall Discussion
 
-The figures below compare the predictions produced by the standalone **ARIMA(1,1,1)** model and the **Hybrid(1,1,1)** residual-learning model against the observed stock prices over the testing period.
+The experiments demonstrate a clear difference between the two ensemble strategies.
 
-- Both models successfully capture the overall movement of the stock price; however, the hybrid model more closely follows short-term market fluctuations.
-- The residual-learning LSTM reduces the remaining forecasting errors produced by the statistical model, resulting in predictions that remain consistently closer to the observed prices.
-- The improved visual agreement is consistent with the quantitative evaluation, where the Hybrid(1,1,1) model achieved the lowest forecasting error, the highest directional accuracy, and the highest simulated trading profit among all evaluated configurations.
+The weighted ensemble approach simply averages two complete forecasts. When one forecasting model is substantially less accurate than the other, the averaging process introduces additional prediction error and reduces overall forecasting performance. Consequently, none of the weighted ensemble configurations outperformed the standalone ARIMA models.
 
-| Fixed ARIMA(1,1,1) | Hybrid(1,1,1) |
-| :---: | :---: |
-| ![ARIMA](../../results/c6/c6_arima_111_prediction.png) | ![Hybrid](../../results/c6/c6_hybrid_1_1_1_prediction.png) |
+Residual learning follows a different strategy. Instead of predicting the entire stock price, the GRU model focuses only on correcting the errors produced by ARIMA. This decomposition simplifies the learning problem by allowing ARIMA to model the linear components of the time series while the GRU learns the remaining nonlinear patterns.
 
-# 5. Directory Structure & Professional Standards
+Overall, the residual-learning approach consistently outperformed both the standalone forecasting models and the weighted ensemble strategy. Although **Residual Hybrid (2,1,2)** achieved the lowest regression error, **Residual Hybrid (1,1,1)** provided the best overall balance between forecasting accuracy, directional prediction, and simulated trading profitability. These findings indicate that residual learning is a more effective method for combining statistical and deep learning models for stock price forecasting than simple weighted averaging.
 
-Task C.6 extends the modular forecasting framework developed throughout the project by introducing a hybrid residual-learning architecture while preserving the existing separation between data preprocessing, model construction, training, evaluation, and experiment orchestration.
+# 4. Verification and Prediction Examples
 
-Rather than modifying the core deep learning pipeline, the implementation integrates a statistical forecasting stage (ARIMA) with the existing LSTM framework through residual learning. This modular design allows statistical and deep learning models to operate independently while remaining reusable for future forecasting experiments.
+To verify the implementation, both the weighted ensemble experiment and the hybrid residual-learning experiment were executed using the automated experiment runners. All models were trained and evaluated using the same chronological preprocessing pipeline, ensuring that every forecasting method was tested under identical experimental conditions.
 
-The resulting implementation improves maintainability, reproducibility, and extensibility by introducing the hybrid forecasting capability without disrupting the architecture established in previous tasks.
+The generated outputs include:
 
-```text
-fin-tech101/
-├── data/
-│   └── CBA.AX_cache.csv                     # Historical stock dataset cache
-├── results/
-│   └── c6/
-│       ├── c6_hybrid_lstm_1_1_1.weights.h5  # LSTM residual weights
-│       ├── c6_hybrid_lstm_2_1_2.weights.h5
-│       ├── c6_hybrid_lstm_5_1_0.weights.h5
-│       ├── c6_arima_111_prediction.png      # Prediction plots
-│       ├── c6_hybrid_1_1_1_prediction.png
-│       ├── c6_hybrid_2_1_2_prediction.png
-│       └── c6_hybrid_5_1_0_prediction.png
-├── csv-results/
-│   └── c6/
-│       └── c6_hybrid_metrics.csv            # Consolidated metrics CSV
-├── docs/
-│   ├── c6_residual_design.md            # Residual learning design document
-│   ├── implementation_audit.md          # Data pipeline audit
-│   ├── validation_split_refactor.md     # Validation split documentation
-│   └── walkthrough.md                   # Verification walkthrough
-├── reports/
-│   └── task_c6/
-│       ├── Task C.6 Report.md               # Final evaluation report
-│       └── screenshots/
-│           └── c6_terminal.png              # Execution screenshot
-└── src/
-    ├── config.py                    # Global project configuration
-    ├── data_processing.py           # Data loading and preprocessing
-    ├── model_factory.py             # Reusable LSTM model construction
-    ├── train.py                     # Deep learning training pipeline
-    ├── test.py                      # Evaluation utilities
-    ├── run_c6_ensemble.py           # Preliminary ensembling experiments
-    ├── run_c6_hybrid.py             # Hybrid residual-learning experiment runner
-    └── experiment_utils.py          # Shared experiment utilities
-```
+- Consolidated evaluation metrics for both the weighted ensemble and residual-learning experiments.
+- Prediction plots comparing the forecasting behaviour of ARIMA, GRU, weighted ensembles, and hybrid models.
+- Saved model weights for each residual-learning GRU model.
+- Summary reports documenting the experimental findings.
 
-The completed implementation provides a reusable hybrid forecasting framework that combines statistical forecasting and deep learning within a consistent experimental pipeline. Additional hybrid models or ensemble strategies can be incorporated with minimal modification to the existing project structure.
+The successful execution of both experiments confirms that the forecasting pipeline correctly supports standalone statistical models, deep learning models, weighted ensembles, and hybrid residual-learning approaches.
 
 ---
 
-# 6. Conclusion
+### Figure 4.1 – Weighted Ensemble Prediction
 
-Task C.6 investigated whether ensemble learning could improve stock price forecasting by combining classical statistical modelling with deep learning.
+![Weighted Ensemble Prediction](../../results/c6/c6_weighted_ensemble_prediction.png)
 
-Two ensemble strategies were evaluated. The initial approach employed conventional weighted prediction averaging between fixed-parameter ARIMA models and the existing LSTM model. Experimental results demonstrated that weighted averaging consistently degraded forecasting performance, as the stronger ARIMA predictions were negatively influenced by the larger forecasting errors of the standalone LSTM.
+The weighted ensemble prediction combines the forecasts produced by the GRU and ARIMA models using fixed weighting coefficients. Although the ensemble follows the overall market trend, the prediction curve does not consistently improve upon the standalone ARIMA forecast. This observation agrees with the quantitative results presented in Section 3, where none of the weighted ensemble configurations outperformed the corresponding ARIMA models. The experiment demonstrates that simply averaging two complete forecasting models is insufficient when one model consistently produces larger prediction errors.
 
-Motivated by these findings, a second ensemble strategy based on **hybrid residual learning** was developed. Instead of predicting absolute stock prices independently, the LSTM was trained to model only the forecasting residuals generated by the ARIMA model. This allowed the statistical model to capture the primary linear temporal structure while the LSTM specialised in correcting the remaining nonlinear forecasting errors.
+---
 
-The proposed hybrid approach consistently improved forecasting performance across all evaluated ARIMA configurations. Among the tested models, the **Hybrid(ARIMA(1,1,1) + Residual LSTM)** configuration achieved the strongest overall performance, recording the lowest regression errors, the highest directional accuracy, and the largest simulated trading profit.
+### Figure 4.2 – Residual Hybrid Prediction (ARIMA(1,1,1) + GRU)
 
-These findings demonstrate that residual learning provides a substantially more effective hybrid forecasting strategy than conventional weighted prediction averaging for the selected dataset and experimental configuration.
+![Residual Hybrid Prediction](../../results/c6/c6_hybrid_1_1_1_prediction.png)
 
-More broadly, Task C.6 illustrates the importance of experimental evaluation when designing ensemble forecasting systems. Rather than assuming that combining multiple predictors automatically improves performance, the project systematically evaluated alternative ensemble strategies and used the experimental evidence to guide the development of a more effective hybrid model.
+The residual-learning model produces predictions that closely follow the actual stock prices throughout the testing period. Rather than predicting the complete stock price directly, the GRU model learns to correct the residual errors generated by ARIMA. This results in smaller deviations from the actual prices, particularly during periods of rapid market movement. The visual improvement is consistent with the substantial increase in Directional Accuracy (56.03%) and simulated trading profit ($36.97) achieved by the Residual Hybrid (1,1,1) model.
 
-The completed residual-learning framework establishes a robust and extensible forecasting architecture that combines the complementary strengths of statistical time-series modelling and deep learning. This provides a strong foundation for Task C.7, where additional external information—such as financial news sentiment or other alternative data sources—can be incorporated to further improve forecasting performance.
+---
+
+### Figure 4.3 – Residual Hybrid Prediction (ARIMA(2,1,2) + GRU)
+
+![Residual Hybrid Prediction](../../results/c6/c6_hybrid_2_1_2_prediction.png)
+
+The Residual Hybrid (2,1,2) configuration achieved the lowest regression errors among all evaluated forecasting models. The prediction curve closely matches the actual stock prices over the testing period, producing the lowest MAE, RMSE, and MAPE values reported in Section 3. These results demonstrate that residual learning consistently improves the forecasting accuracy of the underlying ARIMA model.
+
+---
+
+### Figure 4.4 – Residual Hybrid Prediction (ARIMA(5,1,0) + GRU)
+
+![Residual Hybrid Prediction](../../results/c6/c6_hybrid_5_1_0_prediction.png)
+
+The Residual Hybrid (5,1,0) model also improves upon its standalone ARIMA counterpart by reducing prediction errors and increasing directional accuracy. Although its overall forecasting performance is slightly lower than the other hybrid configurations, the prediction curve remains closer to the actual stock prices than the standalone statistical model.
+
+Overall, the visual comparisons support the quantitative evaluation results presented in Section 3. The weighted ensemble approach provides only limited improvement over the standalone GRU model, whereas the residual-learning approach consistently enhances the forecasting performance of all three ARIMA configurations. These observations confirm that residual learning is a more effective strategy for combining statistical and deep learning models for stock price forecasting.
+
+# 5. Conclusion
+
+Task C.6 has been successfully completed by investigating two approaches for combining statistical and deep learning models for stock price forecasting: **weighted ensemble learning** and **hybrid residual learning**. Both approaches integrated the GRU architecture selected in Task C.4 with multiple ARIMA forecasting models while reusing the same preprocessing, training, and evaluation pipeline established in the previous tasks.
+
+The weighted ensemble experiments demonstrated that simple linear averaging of GRU and ARIMA predictions did not improve forecasting performance. Although the ensemble models outperformed the standalone GRU model, none of the weighted combinations achieved better results than the corresponding standalone ARIMA models. These findings indicate that averaging the predictions of two complete forecasting models is not an effective strategy when one model consistently produces larger prediction errors.
+
+In contrast, the residual-learning approach consistently improved the performance of all evaluated ARIMA models. The hybrid models achieved lower regression errors and higher directional accuracy than their standalone ARIMA counterparts, demonstrating that allowing the GRU model to learn and correct ARIMA's residual errors is a more effective method for combining statistical and deep learning models.
+
+Among the evaluated configurations, **Residual Hybrid (2,1,2)** achieved the lowest prediction errors, while **Residual Hybrid (1,1,1)** achieved the highest Directional Accuracy (**56.03%**) and the greatest simulated trading profit (**$36.97**). Considering both forecasting accuracy and practical trading performance, the **Residual Hybrid (1,1,1)** configuration provides the best overall balance for the CBA.AX dataset.
+
+Overall, Task C.6 demonstrates that hybrid residual learning is a more effective ensemble strategy than simple weighted averaging for this forecasting problem. By combining the linear modelling capability of ARIMA with the nonlinear learning capability of GRU, the proposed hybrid framework achieves more accurate and robust stock price forecasts than either standalone forecasting approach.

@@ -2,8 +2,8 @@
 Task C.6 Preliminary Experiment: Weighted Prediction Averaging Ensemble
 
 This script represents the initial weighted-averaging investigation between
-the fixed-parameter ARIMA model and the LSTM model. Experimental results showed
-that linear ensembling degraded performance due to price level drift in the LSTM.
+the fixed-parameter ARIMA model and the GRU model. Experimental results showed
+that linear ensembling degraded performance due to price level drift in the GRU.
 
 The final, primary Task C.6 implementation is located at `src/run_c6_hybrid.py` 
 (which implements the hybrid residual-learning framework).
@@ -111,15 +111,15 @@ def main():
     print(f"[C.6 Data] Test samples aligned: {len(test_df)}")
 
     # --------------------------------------------------------------------------
-    # Step 2: Generate LSTM Baseline Predictions
+    # Step 2: Generate GRU Baseline Predictions
     # --------------------------------------------------------------------------
-    print("[C.6 LSTM] Loading LSTM baseline weights and generating predictions...")
+    print("[C.6 GRU] Loading GRU baseline weights and generating predictions...")
     n_features = len(FEATURE_COLUMNS)
-    lstm_model = build_dl_model(
+    gru_model = build_dl_model(
         lookback_steps=LOOKBACK_STEPS,
         n_features=n_features,
         units=128,
-        cell_type="LSTM",
+        cell_type="GRU",
         n_layers=2,
         dropout=0.3,
         loss="huber",
@@ -127,14 +127,14 @@ def main():
         future_steps=1,
     )
     
-    weights_path = Path("results/c4/LSTM_BASE.weights.h5")
+    weights_path = Path("results/c4/GRU_BASE.weights.h5")
     if not weights_path.exists():
         # Fallback to general results if c4 folder is absent
-        weights_path = Path("results/lstm_model.weights.h5")
+        weights_path = Path("results/gru_model.weights.h5")
         
-    lstm_model.load_weights(weights_path)
-    lstm_pred_scaled = lstm_model.predict(X_test, verbose=0)
-    y_pred_lstm = scaler.inverse_transform(lstm_pred_scaled.reshape(-1, 1)).reshape(-1)
+    gru_model.load_weights(weights_path)
+    gru_pred_scaled = gru_model.predict(X_test, verbose=0)
+    y_pred_gru = scaler.inverse_transform(gru_pred_scaled.reshape(-1, 1)).reshape(-1)
 
     # --------------------------------------------------------------------------
     # Step 3: Run Fixed-Parameter ARIMA Forecasts (Option B)
@@ -179,12 +179,12 @@ def main():
     print("[C.6 Evaluation] Computing metrics for all combinations...", flush=True)
     results_list = []
     
-    # 4.1 LSTM Baseline
-    lstm_metrics = evaluate_preds(y_pred_lstm, y_test_unscaled, prev_actual, test_df)
+    # 4.1 GRU Baseline
+    gru_metrics = evaluate_preds(y_pred_gru, y_test_unscaled, prev_actual, test_df)
     results_list.append({
-        "Model": "LSTM_BASE",
+        "Model": "GRU_BASE",
         "Order/Weights": "N/A",
-        **lstm_metrics
+        **gru_metrics
     })
 
     # 4.2 ARIMA Baselines
@@ -197,21 +197,21 @@ def main():
             **metrics
         })
 
-    # 4.3 Weighted Ensembles (combine LSTM with each ARIMA model)
+    # 4.3 Weighted Ensembles (combine GRU with each ARIMA model)
     ensemble_weights = [(0.5, 0.5), (0.7, 0.3), (0.3, 0.7)]
     
     for order in arima_orders:
         order_str = f"ARIMA{order}"
         y_pred_arima = arima_preds[order]
         
-        for w_lstm, w_arima in ensemble_weights:
-            ens_label = f"Ensemble (LSTM*{w_lstm} + {order_str}*{w_arima})"
-            y_pred_ens = w_lstm * y_pred_lstm + w_arima * y_pred_arima
+        for w_gru, w_arima in ensemble_weights:
+            ens_label = f"Ensemble (GRU*{w_gru} + {order_str}*{w_arima})"
+            y_pred_ens = w_gru * y_pred_gru + w_arima * y_pred_arima
             
             metrics = evaluate_preds(y_pred_ens, y_test_unscaled, prev_actual, test_df)
             results_list.append({
                 "Model": ens_label,
-                "Order/Weights": f"LSTM: {w_lstm}, ARIMA: {w_arima}",
+                "Order/Weights": f"GRU: {w_gru}, ARIMA: {w_arima}",
                 **metrics
             })
 
@@ -250,12 +250,12 @@ def main():
     
     # Re-evaluate the best ensemble predictions to plot
     # Extract weights and ARIMA order from best ensemble name
-    # e.g., Ensemble (LSTM*0.7 + ARIMA(2, 1, 2)*0.3)
-    best_w_lstm = 0.5
+    # e.g., Ensemble (GRU*0.7 + ARIMA(2, 1, 2)*0.3)
+    best_w_gru = 0.5
     best_w_arima = 0.5
-    for w_lstm, w_arima in ensemble_weights:
-        if f"LSTM*{w_lstm}" in best_ens_name:
-            best_w_lstm = w_lstm
+    for w_gru, w_arima in ensemble_weights:
+        if f"GRU*{w_gru}" in best_ens_name:
+            best_w_gru = w_gru
             best_w_arima = w_arima
             break
             
@@ -265,7 +265,7 @@ def main():
             best_arima_for_ens = order
             break
             
-    best_ens_preds = best_w_lstm * y_pred_lstm + best_w_arima * arima_preds[best_arima_for_ens]
+    best_ens_preds = best_w_gru * y_pred_gru + best_w_arima * arima_preds[best_arima_for_ens]
     plot_c6_predictions(
         test_df.index,
         y_test_unscaled,
@@ -289,7 +289,7 @@ def main():
     
     md_report = f"""# Task C.6 Ensemble Forecasting Experiment Summary (Fixed-Parameter Protocol)
 
-This report documents the experimental results of the fixed-parameter evaluation protocol (Option B). The classical statistical ARIMA model and the deep learning LSTM model are both evaluated under identical chronological partitioning and frozen parameter constraints.
+This report documents the experimental results of the fixed-parameter evaluation protocol (Option B). The classical statistical ARIMA model and the deep learning GRU model are both evaluated under identical chronological partitioning and frozen parameter constraints.
 
 ---
 
@@ -299,22 +299,22 @@ This report documents the experimental results of the fixed-parameter evaluation
 - **Chronological Test Period**: Starts at `{SPLIT_DATE}` (split boundary).
 - **Target Variable**: Adjusted Closing Price (`adjclose`).
 - **ARIMA Method**: Fixed-parameter forecasting (Option B). The model parameters are estimated **once** on the training dataset (up to {test_df.index[0].strftime('%Y-%m-%d')}). The fitted parameters are frozen, and the filter is applied over the test period to generate one-step-ahead forecasts.
-- **Ensemble Method**: Linear weighted averaging of LSTM predictions with fixed-parameter ARIMA predictions.
+- **Ensemble Method**: Linear weighted averaging of GRU predictions with fixed-parameter ARIMA predictions.
 
 ---
 
 ## 2. Tested Configurations
 
-- **LSTM Baseline**:
-  - `LSTM_BASE`: Standard 2-layer LSTM model with 128 hidden units.
+- **GRU Baseline**:
+  - `GRU_BASE`: Standard 2-layer GRU model with 128 hidden units.
 - **ARIMA Baseline Orders**:
   - `ARIMA(1, 1, 1)`: Standard ARMA(1,1) on first-differenced prices.
   - `ARIMA(2, 1, 2)`: Higher-order stationary modeling.
   - `ARIMA(5, 1, 0)`: Autoregressive-only model on first-differenced prices.
-- **Ensemble Weights (LSTM / ARIMA)**:
-  - 50% LSTM / 50% ARIMA
-  - 70% LSTM / 30% ARIMA
-  - 30% LSTM / 70% ARIMA
+- **Ensemble Weights (GRU / ARIMA)**:
+  - 50% GRU / 50% ARIMA
+  - 70% GRU / 30% ARIMA
+  - 30% GRU / 70% ARIMA
 
 ---
 
@@ -326,18 +326,18 @@ This report documents the experimental results of the fixed-parameter evaluation
 
 ## 4. Key Findings
 
-1. **ARIMA Baseline Outperforms LSTM**:
-   - All individual Fixed-Parameter ARIMA models significantly outperformed the static LSTM baseline.
-   - The best-performing model overall was **{best_overall_name}** with an MAE of **${best_overall_row['MAE']:.4f}** and RMSE of **${best_overall_row['RMSE']:.4f}** (compared to the LSTM's MAE of **${lstm_metrics['MAE']:.4f}**).
+1. **ARIMA Baseline Outperforms GRU**:
+   - All individual Fixed-Parameter ARIMA models significantly outperformed the static GRU baseline.
+   - The best-performing model overall was **{best_overall_name}** with an MAE of **${best_overall_row['MAE']:.4f}** and RMSE of **${best_overall_row['RMSE']:.4f}** (compared to the GRU's MAE of **${gru_metrics['MAE']:.4f}**).
    - This occurs because ARIMA differences the price series to model local changes and anchors its next-day forecast on the most recent actual price ($y_t$), avoiding drift.
 
 2. **Weighted Ensembles Underperform ARIMA**:
    - No weighted ensemble outperformed the individual ARIMA baselines.
-   - Averaging the weaker LSTM baseline (MAE ~${lstm_metrics['MAE']:.4f}) with the stronger ARIMA baseline (MAE ~$1.08) degraded performance. The ensemble error scales linearly with the weight of the LSTM.
+   - Averaging the weaker GRU baseline (MAE ~${gru_metrics['MAE']:.4f}) with the stronger ARIMA baseline (MAE ~$1.08) degraded performance. The ensemble error scales linearly with the weight of the GRU.
 
 3. **Trading Profitability**:
    - In contrast to the rolling ARIMA run, the Fixed-Parameter ARIMA models generated **positive simulated trading profits** (e.g. `ARIMA(5, 1, 0)` achieved a total profit of **${results_df.loc[results_df['Model'] == 'ARIMA(5, 1, 0)', 'total_profit'].values[0]:.2f}** and directional accuracy of **{results_df.loc[results_df['Model'] == 'ARIMA(5, 1, 0)', 'DA'].values[0]:.2f}%**).
-   - All weighted ensembles reported negative profits, demonstrating that LSTM error contamination directly harms trading utility.
+   - All weighted ensembles reported negative profits, demonstrating that GRU error contamination directly harms trading utility.
 
 ---
 
@@ -350,7 +350,7 @@ This report documents the experimental results of the fixed-parameter evaluation
 
 ## 6. Recommended Next Steps
 
-1. **Hybrid Residual-Learning (Option D)**: Instead of linear weighted averaging, use the LSTM model to predict the forecast residuals of the ARIMA model.
+1. **Hybrid Residual-Learning (Option D)**: Instead of linear weighted averaging, use the GRU model to predict the forecast residuals of the ARIMA model.
 2. **Sentiment Indicators (Task C.7)**: Integrate external news sentiment data to further enhance directional trading signals.
 """
 

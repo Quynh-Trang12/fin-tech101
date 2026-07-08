@@ -1,0 +1,207 @@
+{
+  "explains": [],
+  "count": 9,
+  "quotes": [
+    {
+      "exchange": "PNK",
+      "shortname": "Commonwealth Bank of Australia",
+      "quoteType": "EQUITY",
+      "symbol": "CMWAY",
+      "index": "quotes",
+      "score": 100005.0,
+      "typeDisp": "Equity",
+      "longname": "Commonwealth Bank of Australia",
+      "exchDisp": "OTC Markets",
+      "sector": "Financial Services",
+      "sectorDisp": "Financial Services",
+      "industry": "Banks\u2014Diversified",
+      "industryDisp": "Banks\u2014Diversified",
+      "isYahooFinance": true
+    }
+  ],
+  "news": [
+    {
+      "uuid": "ae1a0eb3-996b-30c9-aeff-37538ff8f171",
+      "title": "Morgan Stanley Among Banks Challenging Growing Dollar Optimism",
+      "publisher": "Bloomberg",
+      "link": "https://finance.yahoo.com/markets/currencies/articles/morgan-stanley-among-banks-challenging-090000729.html",
+      "providerPublishTime": 1782982800,
+      "type": "STORY",
+      "relatedTickers": [
+        "MS",
+        "DX-Y.NYB",
+        "GS",
+        "HSBC",
+        "JPM",
+        "MS-PQ",
+        "CBA.AX",
+        "CBAPI.AX",
+        "CBAPJ.AX",
+        "CBAPK.AX",
+        "CBAPL.AX",
+        "CBAPM.AX",
+        "ACA.PA",
+        "BAC"
+      ]
+    },
+    {
+      "uuid": "1fd6b497-5f34-3152-abe5-51fc612f998b",
+      "title": "Companies rehire workers laid off for AI as automation falls short",
+      "publisher": "Quartz",
+      "link": "https://finance.yahoo.com/m/1fd6b497-5f34-3152-abe5-51fc612f998b/companies-rehire-workers-laid.html",
+      "providerPublishTime": 1782921353,
+      "type": "STORY",
+      "relatedTickers": [
+        "CBA.AX",
+        "IBM"
+      ]
+    },
+    {
+      "uuid": "718faa09-9b2b-36cf-9234-b977a06d3e2c",
+      "title": "FRN Variable Rate Fix",
+      "publisher": "Business Wire",
+      "link": "https://finance.yahoo.com/markets/options/articles/frn-variable-rate-fix-060000356.html",
+      "providerPublishTime": 1782108000,
+      "type": "STORY",
+      "relatedTickers": [
+        "CBA.AX",
+        "KY15",
+        "DB"
+      ]
+    },
+    {
+      "uuid": "5fbc9b9c-aa69-3ec0-a9e8-f4dbb25f4054",
+      "title": "Pound Trades Near 2026 Low as UK Political Uncertainty Builds",
+      "publisher": "Bloomberg",
+      "link": "https://finance.yahoo.com/markets/currencies/articles/pound-trades-near-2026-low-080906468.html",
+      "providerPublishTime": 1782091011,
+      "type": "STORY",
+      "relatedTickers": [
+        "CBA.AX",
+        "CBAPI.AX",
+        "CBAPJ.AX",
+        "CBAPK.AX",
+        "CBAPL.AX",
+        "CBAPM.AX"
+      ]
+    },
+    {
+      "uuid": "c9f366fe-2858-391d-ad8d-7255131370be",
+      "title": "Oil Climbs After Fresh Trump Threat as US-Iran Peace Talks Begin",
+      "publisher": "Bloomberg",
+      "link": "https://finance.yahoo.com/energy/articles/oil-climbs-fresh-trump-threat-223930542.html",
+      "providerPublishTime": 1782079345,
+      "type": "STORY",
+      "relatedTickers": [
+        "CBA.AX",
+        "CBAPI.AX",
+        "CBAPJ.AX",
+        "CBAPK.AX",
+        "CBAPL.AX",
+        "CBAPM.AX",
+        "CB"
+      ]
+    },
+    {
+      "uuid": "a0773ef8-f082-39bc-b2c9-d6a274d745be",
+      "title": "Commonwealth Bank of Australia appoints new CIO, CTO to boost technology, AI strategy",
+      "publisher": "Reuters",
+      "link": "https://finance.yahoo.com/technology/ai/articles/commonwealth-bank-australia-appoints-cio-235755334.html",
+      "providerPublishTime": 1781827075,
+      "type": "STORY",
+      "thumbnail": {
+        "resolutions": [
+          {
+            "url": "https://s.yimg.com/uu/api/res/1.2/UytWRvws7B02iQwGLNovpA--~B/aD01MzQ7dz04MDA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/reuters-finance.com/0e2dfef3810a9e0e3ef64d74f332da84",
+            "width": 800,
+            "height": 534,
+            "tag": "original"
+          },
+          {
+            "url": "https://s.yimg.com/uu/api/res/1.2/.bDzliNnuUie467E0yIYhQ--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/reuters-finance.com/0e2dfef3810a9e0e3ef64d74f332da84",
+            "width": 140,
+            "height": 140,
+            "tag": "140x140"
+          }
+        ]
+      },
+      "relatedTickers": [
+        "CBA.AX"
+      ]
+    },
+    {
+      "uuid": "e67fbfdd-5638-3e2f-af53-8be95aeba81a",
+      "title": "Canadians of all ages increasingly embrace banking apps",
+      "publisher": "CNW Group",
+      "link": "https://finance.yahoo.com/markets/currencies/articles/canadians-ages-increasingly-embrace-banking-131200274.html",
+      "providerPublishTime": 1781615520,
+      "type": "STORY",
+      "thumbnail": {
+        "resolutions": [
+          {
+            "url": "https://s.yimg.com/uu/api/res/1.2/zE.PuQWe5.7WCoNCE2dG2Q--~B/aD0zOTg7dz0xMDk7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/cnwgroup.com/000e3acc549e5f0e2fc666a284b0c846",
+            "width": 109,
+            "height": 398,
+            "tag": "original"
+          },
+          {
+            "url": "https://s.yimg.com/uu/api/res/1.2/j03LKaFksgsy.kLgkIpxjg--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/cnwgroup.com/000e3acc549e5f0e2fc666a284b0c846",
+            "width": 140,
+            "height": 140,
+            "tag": "140x140"
+          }
+        ]
+      },
+      "relatedTickers": [
+        "CBA.AX"
+      ]
+    },
+    {
+      "uuid": "0fdd319f-8582-35a6-97b4-be6bfb83d8bd",
+      "title": "Did Profit Uptick and RBA Countdown Just Shift Commonwealth Bank's (ASX:CBA) Investment Narrative?",
+      "publisher": "Simply Wall St.",
+      "link": "https://finance.yahoo.com/markets/stocks/articles/did-profit-uptick-rba-countdown-080841996.html",
+      "providerPublishTime": 1781510921,
+      "type": "STORY",
+      "thumbnail": {
+        "resolutions": [
+          {
+            "url": "https://s.yimg.com/uu/api/res/1.2/b_3WmLnZoR0E39zWtvV1NQ--~B/aD00MzI7dz0xMTk0O2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/simply_wall_st__316/4cde4e1c4ee440b547fa08239c394262",
+            "width": 1194,
+            "height": 432,
+            "tag": "original"
+          },
+          {
+            "url": "https://s.yimg.com/uu/api/res/1.2/EN66XgPRnBrmFQKyKdEGcQ--~B/Zmk9ZmlsbDtoPTE0MDtweW9mZj0wO3c9MTQwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/simply_wall_st__316/4cde4e1c4ee440b547fa08239c394262",
+            "width": 140,
+            "height": 140,
+            "tag": "140x140"
+          }
+        ]
+      },
+      "relatedTickers": [
+        "CBA.AX",
+        "CBAPI.AX",
+        "CBAPJ.AX",
+        "CBAPK.AX",
+        "CBAPL.AX",
+        "CBAPM.AX"
+      ]
+    }
+  ],
+  "nav": [],
+  "lists": [],
+  "researchReports": [],
+  "screenerFieldResults": [],
+  "totalTime": 99,
+  "timeTakenForQuotes": 414,
+  "timeTakenForNews": 900,
+  "timeTakenForAlgowatchlist": 400,
+  "timeTakenForPredefinedScreener": 400,
+  "timeTakenForCrunchbase": 0,
+  "timeTakenForNav": 400,
+  "timeTakenForResearchReports": 0,
+  "timeTakenForScreenerField": 0,
+  "timeTakenForCulturalAssets": 0,
+  "timeTakenForSearchLists": 0
+}

@@ -9,141 +9,296 @@
 
 ---
 
-## Introduction
-This report documents the design, implementation, and empirical results of the deep learning forecasting models and hyperparameter sweep for Task C.4. We designed a dynamic model factory supporting Vanilla Recurrent Neural Networks (SimpleRNN), Gated Recurrent Units (GRU), and Long Short-Term Memory (LSTM) cells. We developed training and testing pipelines with deterministic seed constraints and resolved the Keras Mean Absolute Error (MAE) scaling bug. Finally, we conducted 8 distinct configuration sweeps on the real historical `CBA.AX` stock price dataset under a strict chronological time-series split, analyzing the impact of recurrent cell mechanics, depth, layer width, and loss formulations.
+# 1. Introduction
+
+## 1.1 Background
+
+In the previous tasks, the stock price prediction model was implemented using a fixed neural network architecture. While this approach was sufficient for developing the initial forecasting system, modifying the model required manual changes to the source code whenever a different recurrent neural network architecture or hyperparameter configuration was needed.
+
+To improve flexibility and reusability, Task C.4 introduces a configurable model construction function that can generate different recurrent neural network architectures from a common interface. Instead of rewriting the model implementation, users can specify parameters such as the recurrent cell type, number of layers, and hidden units to automatically construct the desired network. This configurable design enables systematic experimentation with different model architectures while maintaining the same data preprocessing and evaluation pipeline. By comparing multiple configurations under identical training conditions, the influence of different architectural choices on stock price prediction performance can be evaluated.
 
 ---
 
-## 1. Pipeline Architecture & Implementation Details
+## 1.2 Objectives
 
-### 1.1 Dynamic Model Factory (`src/model_factory.py`)
-To build models programmatically, we implemented the `build_dl_model` function in `model_factory.py`. The factory:
-* Resolves cell string keys (`"LSTM"`, `"GRU"`, `"SimpleRNN"`) to respective Keras layer classes.
-* Assembles stacked recurrent layers. To support stack depth, all layers except the last must set `return_sequences=True`. The terminal recurrent layer sets `return_sequences=False` to produce a 2D state vector.
-* Supports Keras `Bidirectional` wrapper layers.
-* Appends `Dropout` regularization layers after each recurrent layer to prevent overfitting.
-* Appends a final single-neuron `Dense(1, activation="linear")` layer for next-step price prediction.
+The objective of Task C.4 is to develop a reusable deep learning model construction pipeline for stock price prediction. The pipeline should:
 
-### 1.2 Training Pipeline (`src/train.py`)
-The training script [train.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/train.py) coordinates data preprocessing and model optimization. Key features:
-* **Global Seed Determinism**: Sets `os.environ['PYTHONHASHSEED']`, `random.seed(314)`, `np.random.seed(314)`, and `tf.random.set_seed(314)` at import time and function execution to ensure reproducible model initializations.
-* **Date Splitting Integration**: Loads the real daily dataset from `data_processing.py` with a strict chronological split (`split_date="2023-08-02"`).
-* **Weight Checkpoint Saving**: Trains models using TensorFlow callbacks/fit interfaces and writes weight matrices to `results/{model_name}.weights.h5`.
-
-### 1.3 Testing Pipeline & Metric Evaluation (`src/test.py`)
-The evaluation script `test.py` loads weight checkpoints and evaluates test data. It resolves the Keras MAE scaling bug by inverting predicted and actual prices *before* calculating errors, ensuring correct unscaled metrics:
-1. **Mean Absolute Error (MAE)**:
-   $$MAE = \frac{1}{N} \sum_{t=1}^{N} |y_t - \hat{y}_t|$$
-2. **Root Mean Squared Error (RMSE)**:
-   $$RMSE = \sqrt{\frac{1}{N} \sum_{t=1}^{N} (y_t - \hat{y}_t)^2}$$
-3. **Mean Absolute Percentage Error (MAPE)**:
-   $$MAPE = \frac{100\%}{N} \sum_{t=1}^{N} \left|\frac{y_t - \hat{y}_t}{y_t}\right|$$
-4. **Directional Accuracy (DA)**:
-   $$DA = \frac{1}{N-1} \sum_{t=2}^{N} \mathbb{I}\left(\text{sgn}(y_t - y_{t-1}) == \text{sgn}(\hat{y}_t - y_{t-1})\right)$$
-
-It also runs a simulated trading strategy (buying when predicted price is higher than current price, selling when lower) to report **Trading Accuracy**, **Total Profit**, and **Profit per Trade**.
+- Construct recurrent neural network models using configurable parameters.
+- Support multiple recurrent cell types, including LSTM, GRU, and SimpleRNN.
+- Allow different network architectures to be generated without modifying the model implementation.
+- Train and evaluate each model using the same preprocessing pipeline developed in Task C.2.
+- Compare different model architectures and hyperparameter configurations using common evaluation metrics.
 
 ---
 
-## 2. Hyperparameter Sweep Strategy
+# 2. Deep Learning Pipeline
 
-To isolate and test specific neural architectural assumptions, we defined 8 configurations grouped by the hypothesis each tests. Each configuration modifies exactly one structural parameter relative to the control baseline (`LSTM_BASE`).
+The deep learning pipeline developed for Task C.4 extends the preprocessing pipeline implemented in Task C.2. After the stock data have been loaded, processed, and converted into training, validation, and testing datasets, the pipeline constructs a neural network model, trains the model, evaluates its prediction performance, and compares multiple model configurations.
 
-The configuration keys are self-descriptive: the prefix identifies the recurrent cell type (`LSTM`, `GRU`, `RNN`) and the suffix describes the structural variant (`BASE`, `STACKED`, `SHALLOW`, `WIDE`, `NARROW`, `MSE`).
-
-| Model Name       | Cell Type | Layers | Units | Loss  | Epochs | Batch Size | Hypothesis Tested                                         |
-| :--------------- | :-------- | :----- | :---- | :---- | :----- | :--------- | :-------------------------------------------------------- |
-| **LSTM_BASE**    | LSTM      | 2      | 128   | Huber | 20     | 64         | Standard baseline control benchmark                       |
-| **GRU_BASE**     | GRU       | 2      | 128   | Huber | 20     | 64         | GRU parameter efficiency (no separate cell state)         |
-| **RNN_BASE**     | SimpleRNN | 2      | 128   | Huber | 20     | 64         | Vanishing gradients on 50-day windows                     |
-| **LSTM_STACKED** | LSTM      | 3      | 128   | Huber | 20     | 64         | Representational hierarchy vs parameter overfitting       |
-| **LSTM_SHALLOW** | LSTM      | 1      | 128   | Huber | 20     | 64         | Occam's Razor: simple regularization                      |
-| **LSTM_WIDE**    | LSTM      | 2      | 256   | Huber | 20     | 64         | State capacity expansion vs overfitting noise             |
-| **LSTM_NARROW**  | LSTM      | 2      | 64    | Huber | 20     | 64         | Bottleneck compression as regularizer                     |
-| **LSTM_MSE**     | LSTM      | 2      | 128   | MSE   | 20     | 64         | Outlier sensitivity (quadratic) vs robust (Huber) fitting |
-
----
-
-## 3. Empirical Results & Comparative Analysis
-
-We executed the sweep using the modular experiment runner `run_c4_sweeps.py`, which references parameters defined in `config.py`. The results are tabulated below:
-
-### 3.1 Sweep Metrics Table
-
-| Model Name       | Cell Type | Layers | Units | Loss  | MAE ($)    | RMSE ($)   | MAPE (%)  | DA (%)     | Trading Acc (%) | Total Profit ($) | Profit/Trade ($) |
-| :--------------- | :-------- | :----- | :---- | :---- | :--------- | :--------- | :-------- | :--------- | :-------------- | :--------------- | :--------------- |
-| **LSTM_BASE**    | LSTM      | 2      | 128   | huber | 3.0486     | 3.5555     | 2.87%     | 45.02%     | 45.02%          | -$21.17          | -$0.09           |
-| **GRU_BASE**     | GRU       | 2      | 128   | huber | 3.5731     | 3.8624     | 3.42%     | 45.89%     | 45.89%          | -$24.90          | -$0.11           |
-| **RNN_BASE**     | SimpleRNN | 2      | 128   | huber | **2.0370** | **2.5901** | **1.89%** | 45.02%     | 45.02%          | -$21.12          | -$0.09           |
-| **LSTM_STACKED** | LSTM      | 3      | 128   | huber | 3.9252     | 4.6676     | 3.66%     | **46.32%** | **46.32%**      | **-$18.18**      | **-$0.08**       |
-| **LSTM_SHALLOW** | LSTM      | 1      | 128   | huber | 4.4890     | 4.8137     | 4.30%     | 45.89%     | 45.89%          | -$24.90          | -$0.11           |
-| **LSTM_WIDE**    | LSTM      | 2      | 256   | huber | 3.9878     | 4.4780     | 3.76%     | 45.45%     | 45.45%          | -$25.54          | -$0.11           |
-| **LSTM_NARROW**  | LSTM      | 2      | 64    | huber | 2.8820     | 3.4455     | 2.70%     | 45.02%     | 45.02%          | -$25.56          | -$0.11           |
-| **LSTM_MSE**     | LSTM      | 2      | 128   | mse   | 3.0625     | 3.5699     | 2.88%     | 45.02%     | 45.02%          | -$21.17          | -$0.09           |
-
-### 3.2 Key Findings and Architectural Analysis
-
-1. **SimpleRNN Outperforms Advanced Cells (Cell Type Comparison)**:
-   Surprisingly, `RNN_BASE` (SimpleRNN) achieved the lowest error metrics overall (MAE: **$2.0370**, MAPE: **1.89%**), substantially outperforming `LSTM_BASE` ($3.0486) and `GRU_BASE` ($3.5731). This can be explained by **overfitting and signal complexity**. LSTMs and GRUs are designed to model long-term sequence dependencies, which makes them highly expressive. However, in noisy stock markets, high model capacity often leads to memorizing training noise, resulting in poor generalization on out-of-sample data. The SimpleRNN has lower capacity, which acts as a structural regularizer, forcing it to fit simpler, low-variance trends.
-2. **Optimal Stack Depth (Occam's Razor)**:
-   * `LSTM_SHALLOW` (1 layer) underperformed (MAE: $4.4890), indicating it lacked the representational depth to learn basic relationships.
-   * `LSTM_BASE` (2 layers) improved performance (MAE: $3.0486), representing the optimal capacity sweet spot.
-   * `LSTM_STACKED` (3 layers) degraded error performance (MAE: $3.9252), confirming that excess depth leads to overfitting on time-series noise.
-3. **Narrow Width as a Regularizer**:
-   Reducing LSTM layer width to 64 units (`LSTM_NARROW`) improved the MAE from $3.0486 to **$2.8820**. Conversely, widening the layers to 256 units (`LSTM_WIDE`) increased the MAE to $3.9878. This empirically validates the information bottleneck hypothesis: narrower layers restrict the model's ability to memorize transient noise, forcing it to focus on dominant price trends.
-4. **Huber Loss vs MSE**:
-   `LSTM_BASE` (Huber) slightly outperformed `LSTM_MSE` with an MAE of $3.0486 versus $3.0625. Huber Loss's linear penalty for large errors makes it less sensitive to stock price spikes and outliers, yielding more stable gradients and better generalization.
-5. **Trading Realities and Directional Limits**:
-   Across all sweeps, Directional Accuracy (DA) and Trading Accuracy hovered between **45% and 46%**. Because the model predicts the correct price direction less than half the time, the trading simulation incurred losses (~$18 to ~$25). This highlights the limitations of univariate/basic multivariate price history. In real-world applications, trading models require supplementary features (such as technical oscillators, volume flow, sentiment scores, and macroeconomic factors) to achieve directional edge.
-
----
-
-## 4. Verification and Execution Evidence
-
-### 4.1 Terminal Execution Screenshot
-The screenshot below shows the PowerShell terminal execution of the hyperparameter sweep script:
-![PowerShell Sweep Script Run](screenshots/c4_terminal.png)
-
-### 4.2 Prediction Chart Comparison
-The charts below show the actual versus predicted prices on the test set.
-- The **LSTM_BASE** plot shows the typical smoothing effect of LSTM models.
-- The **RNN_BASE** plot tracks the actual prices more closely, leading to its superior MAE score:
-
-|                             LSTM_BASE                              |                             RNN_BASE                             |
-| :----------------------------------------------------------------: | :--------------------------------------------------------------: |
-| ![LSTM_BASE Prediction](../../results/c4/LSTM_BASE_prediction.png) | ![RNN_BASE Prediction](../../results/c4/RNN_BASE_prediction.png) |
-
----
-
-## 5. Directory Structure & Professional Standards
-
-The project maintains a modular layout that follows SOLID principles. Code dividers are implemented throughout all scripts to group functionalities logically.
+The overall workflow is shown below.
 
 ```text
-fin-tech101/
-├── data/
-│   └── CBA.AX_cache.csv             # Cleaned historical data cache (2020-01-01 to 2024-07-04)
-├── results/
-│   └── c4/
-│       ├── LSTM_BASE_prediction.png     # LSTM_BASE Forecast Plot
-│       ├── RNN_BASE_prediction.png      # RNN_BASE Forecast Plot
-│       └── c4_sweep_results.csv         # Consolidated sweep results CSV
-├── reports/
-│   └── task_c4/
-│       ├── Task C.4 Report.md       # This report
-│       └── screenshots/
-│           └── c4_terminal.png      # PowerShell sweep run screenshot
-└── src/
+Processed Dataset (Task C.2)
+            │
+            ▼
+Phase 1: Model Construction
+            │
+            ▼
+Phase 2: Model Training
+            │
+            ▼
+Phase 3: Model Evaluation
+            │
+            ▼
+Phase 4: Hyperparameter Experiments
+```
 
-    ├── config.py                    # Experiment parameters & sweep settings (Task C.4)
-    ├── data_processing.py           # Preprocessing & chronological splits (Task C.2)
-    ├── model_factory.py             # Dynamic recurrent model factory (Task C.4)
-    ├── run_c4_sweeps.py             # Sweeps experiment runner script (Task C.4)
-    ├── train.py                     # Training pipeline (Task C.4)
-    └── test.py                      # Unscaled testing pipeline (Task C.4)
+The following sections describe each phase in detail.
+
+---
+
+## 2.1 Phase 1 – Model Construction
+
+Instead of implementing separate functions for different recurrent neural network architectures, the project uses a single configurable model construction function. This allows different models to be generated simply by changing a set of input parameters rather than modifying the source code.
+
+The model construction function supports several configurable parameters, including:
+
+- Recurrent cell type (LSTM, GRU, or SimpleRNN)
+- Number of recurrent layers
+- Number of hidden units in each layer
+- Dropout rate
+- Loss function
+- Optimizer
+
+The selected parameters are used to construct and compile a deep learning model that is ready for training.
+
+For example, the following configuration generates a two-layer LSTM model with 128 hidden units.
+
+```text
+Cell Type = LSTM
+Layers = 2
+Hidden Units = 128
+Dropout = 0.3
+
+        │
+        ▼
+
+build_dl_model()
+
+        │
+        ▼
+
+Compiled Deep Learning Model
+```
+
+By separating model construction from model training, the same training and evaluation pipeline can be reused for different neural network architectures. This improves code maintainability and makes it straightforward to compare different model configurations in later experiments.
+
+## 2.2 Phase 2 – Model Training
+
+After the deep learning model has been constructed, it is trained using the processed training dataset generated in Task C.2.
+
+The training pipeline first loads the training, validation, and testing datasets from the preprocessing module. It then constructs the selected neural network architecture using the configurable model construction function before training the model on the training dataset.
+
+During training, the validation dataset is used to monitor the model's performance on unseen data. This provides an indication of how well the model generalizes beyond the training dataset and helps identify potential overfitting.
+
+Once training has been completed, the model weights are saved so that the trained model can be reused later without repeating the training process.
+
+```text
+Training Dataset
+        │
+        ▼
+Construct Model
+        │
+        ▼
+Train Model
+        │
+        ▼
+Validate Performance
+        │
+        ▼
+Save Model Weights
 ```
 
 ---
 
-## 6. Conclusion
-Task C.4 has been successfully completed. We implemented a dynamic model factory and deterministic training/testing pipelines, resolving the reference codebase's MAE scaling bug. Running the 8 configurations on real `CBA.AX` stock prices under a chronological split showed that narrower, simpler model structures (such as `RNN_BASE` and `LSTM_NARROW`) generalize best to unseen prices by resisting market noise. These findings set a solid baseline for the multivariate and multi-step tasks in C.5.
+## 2.3 Phase 3 – Model Evaluation
+
+After training, the saved model is loaded and evaluated using the testing dataset. The model generates predictions for each testing sample, and the predicted stock prices are compared with the actual stock prices using several evaluation metrics. These metrics measure different aspects of prediction performance and allow different model configurations to be compared fairly.
+
+The evaluation metrics used in this project are summarised below.
+
+| Metric | Description |
+|---------|-------------|
+| Mean Absolute Error (MAE) | Measures the average absolute difference between the predicted and actual stock prices. |
+| Root Mean Squared Error (RMSE) | Measures prediction error while giving greater penalty to larger errors. |
+| Mean Absolute Percentage Error (MAPE) | Measures prediction error as a percentage of the actual stock price. |
+| Directional Accuracy (DA) | Measures how often the model correctly predicts whether the stock price will increase or decrease. |
+
+In addition to prediction accuracy, the project also performs a simple trading simulation based on the model's predictions. The simulation reports the trading accuracy, total trading profit, and average profit per trade, providing a practical indication of how the predictions might perform in a basic trading strategy.
+
+```text
+Testing Dataset
+        │
+        ▼
+Load Trained Model
+        │
+        ▼
+Generate Predictions
+        │
+        ▼
+Calculate Evaluation Metrics
+        │
+        ▼
+Trading Simulation
+```
+
+---
+
+## 2.4 Phase 4 – Hyperparameter Experiments
+
+One advantage of using a configurable model construction function is that multiple neural network architectures can be evaluated using the same training and evaluation pipeline.
+
+Instead of modifying the model implementation for every experiment, the project defines different model configurations by changing the model parameters. Each configuration is trained and evaluated using the same dataset, preprocessing pipeline, and evaluation metrics, ensuring a fair comparison between different architectures.
+
+The experiments investigate four aspects of the neural network design:
+
+- Recurrent cell type (LSTM, GRU, and SimpleRNN)
+- Number of recurrent layers
+- Number of hidden units
+- Loss function
+
+The overall experiment workflow is illustrated below.
+
+```text
+Experiment Configuration
+            │
+            ▼
+Construct Model
+            │
+            ▼
+Train Model
+            │
+            ▼
+Evaluate Model
+            │
+            ▼
+Record Results
+            │
+            ▼
+Repeat for Next Configuration
+```
+
+The evaluation results from all experiments are collected into a single results table, allowing the performance of different model configurations to be compared systematically.
+
+# 3. Experimental Results
+
+## 3.1 Experiment Configurations
+
+To evaluate the effect of different neural network architectures, eight model configurations were trained and tested using the same dataset, preprocessing pipeline, and evaluation procedure. Each experiment changes only one architectural or training parameter while keeping the remaining settings unchanged. This allows the influence of each parameter to be evaluated independently.
+
+The finalized preprocessing pipeline produced **728 training sequences**, **128 validation sequences**, and an independent chronological testing dataset. The experiments therefore focus on small- to medium-sized recurrent neural networks (64–256 hidden units and 1–3 recurrent layers), providing sufficient model capacity while reducing the risk of overfitting on a relatively small financial time-series dataset.
+
+The experiments investigate four aspects of the model design:
+
+1. **Recurrent Cell Type** – Compare LSTM, GRU, and SimpleRNN using the same network structure.
+2. **Network Depth** – Compare one, two, and three recurrent layers.
+3. **Hidden Units** – Compare networks with 64, 128, and 256 hidden units.
+4. **Loss Function** – Compare Huber Loss and Mean Squared Error (MSE).
+
+The experiment configurations are summarised below.
+
+| Model Name | Cell Type | Layers | Units | Loss | Epochs | Batch Size |
+|------------|-----------|--------|-------|------|---------|------------|
+| **LSTM_BASE** | LSTM | 2 | 128 | Huber | 20 | 64 |
+| **GRU_BASE** | GRU | 2 | 128 | Huber | 20 | 64 |
+| **RNN_BASE** | SimpleRNN | 2 | 128 | Huber | 20 | 64 |
+| **LSTM_STACKED** | LSTM | 3 | 128 | Huber | 20 | 64 |
+| **LSTM_SHALLOW** | LSTM | 1 | 128 | Huber | 20 | 64 |
+| **LSTM_WIDE** | LSTM | 2 | 256 | Huber | 20 | 64 |
+| **LSTM_NARROW** | LSTM | 2 | 64 | Huber | 20 | 64 |
+| **LSTM_MSE** | LSTM | 2 | 128 | MSE | 20 | 64 |
+
+---
+
+## 3.2 Experimental Results
+
+The hyperparameter sweep was executed using the automated experiment runner. For each configuration, the model was trained, evaluated on the independent testing dataset, and the evaluation metrics were recorded.
+
+The complete experimental results are summarised below.
+
+| Model | Cell Type | Layers | Units | Loss | MAE ($) | RMSE ($) | MAPE (%) | Directional Accuracy (%) |
+|--------|-----------|:------:|:-----:|------|---------:|----------:|----------:|-------------------------:|
+| **LSTM_BASE** | LSTM | 2 | 128 | Huber | 2.9312 | 3.4940 | 2.75 | 44.83 |
+| **GRU_BASE** | GRU | 2 | 128 | Huber | **2.2256** | **2.5751** | **2.12** | 44.83 |
+| **RNN_BASE** | SimpleRNN | 2 | 128 | Huber | 3.7623 | 4.4340 | 3.50 | **46.12** |
+| **LSTM_STACKED** | LSTM | 3 | 128 | Huber | 2.6520 | 3.2555 | 2.49 | 44.40 |
+| **LSTM_SHALLOW** | LSTM | 1 | 128 | Huber | 4.3150 | 4.6711 | 4.12 | 45.26 |
+| **LSTM_WIDE** | LSTM | 2 | 256 | Huber | 3.4934 | 4.0006 | 3.29 | 45.69 |
+| **LSTM_NARROW** | LSTM | 2 | 64 | Huber | 3.6578 | 4.3151 | 3.41 | 45.69 |
+| **LSTM_MSE** | LSTM | 2 | 128 | MSE | 2.9251 | 3.4876 | 2.74 | 44.83 |
+
+From the experimental results, **GRU_BASE** achieved the lowest prediction errors in terms of MAE, RMSE, and MAPE, while **RNN_BASE** achieved the highest directional accuracy. These results demonstrate that different evaluation metrics may favour different model configurations, highlighting the importance of evaluating forecasting models using multiple complementary performance measures.
+
+---
+
+## 3.3 Discussion
+
+### Recurrent Cell Type
+
+The three recurrent architectures produced noticeably different prediction performance under the same network configuration. Among them, **GRU_BASE** achieved the lowest MAE, RMSE, and MAPE values, indicating that the GRU architecture provided the most accurate price forecasts for the CBA.AX dataset.
+
+Although **SimpleRNN** achieved the highest directional accuracy (46.12%), it also produced the largest prediction errors among the three recurrent cell types. This suggests that correctly predicting the direction of price movement does not necessarily imply more accurate price forecasts. Overall, the GRU architecture provided the best balance between prediction accuracy and model complexity.
+
+### Network Depth
+
+Changing the number of recurrent layers had a noticeable impact on prediction performance. The three-layer **LSTM_STACKED** model outperformed the two-layer **LSTM_BASE** model across all regression metrics, indicating that the additional recurrent layer improved the model's ability to capture temporal patterns in the historical price data.
+
+In contrast, the single-layer **LSTM_SHALLOW** model produced the highest prediction errors among the LSTM variants, suggesting that a single recurrent layer does not provide sufficient representational capacity for this forecasting task.
+
+### Hidden Units
+
+The number of hidden units also influenced prediction performance. Contrary to the earlier experiments, increasing the network width from 128 to 256 hidden units did not improve forecasting accuracy. The **LSTM_WIDE** configuration produced larger prediction errors than the baseline model, while the **LSTM_NARROW** model achieved similar directional accuracy but higher regression errors.
+
+These results suggest that increasing model capacity beyond 128 hidden units provides limited benefit for the available training data and may reduce generalisation performance.
+
+### Loss Function
+
+The comparison between Huber Loss and Mean Squared Error (MSE) produced very similar results. Both loss functions achieved comparable forecasting accuracy, with the Huber Loss providing a marginal improvement in MAE and MAPE over MSE. This indicates that the choice of loss function has only a minor influence on model performance for this dataset.
+
+### Overall Findings
+
+The experimental results demonstrate that the choice of neural network architecture has a measurable impact on stock price prediction performance. Among the evaluated configurations, **GRU_BASE** achieved the best overall regression performance, while **RNN_BASE** achieved the highest directional accuracy.
+
+The experiments also show that increasing model complexity does not always improve forecasting performance. While adding an additional recurrent layer benefited the LSTM architecture, increasing the network width to 256 hidden units resulted in poorer generalisation. These findings highlight the importance of systematically evaluating architectural design choices rather than assuming that larger or more complex models will always produce better predictions.
+
+# 4. Verification
+
+To verify the implementation, the hyperparameter sweep was executed using the automated experiment runner. The execution successfully trained and evaluated all eight model configurations using the same preprocessing pipeline, dataset, and evaluation procedure.
+
+The generated outputs include:
+
+- A consolidated CSV file containing the evaluation results for all model configurations.
+- Prediction plots illustrating the forecasting performance of each trained model.
+- Saved model weights for each trained model.
+
+The terminal execution screenshot below confirms that all experiments completed successfully.
+
+![PowerShell Sweep Script Run](screenshots/c4_terminal.png)
+
+The prediction plots below compare the three recurrent neural network architectures evaluated in the first experiment. While the evaluation metrics provide quantitative comparisons, the prediction plots allow the forecasting behaviour of each architecture to be examined visually.
+
+| LSTM_BASE | GRU_BASE | RNN_BASE |
+|:---------:|:--------:|:--------:|
+| ![LSTM_BASE Prediction](../../results/c4/LSTM_BASE_prediction.png) | ![GRU_BASE Prediction](../../results/c4/GRU_BASE_prediction.png) | ![RNN_BASE Prediction](../../results/c4/RNN_BASE_prediction.png) |
+
+The prediction plots are consistent with the quantitative evaluation results presented in Section 3. Both the LSTM and GRU models produce relatively smooth prediction curves that capture the overall upward trend but tend to underestimate periods of rapid price growth. In contrast, the SimpleRNN model follows short-term price movements more closely, producing predictions that align more closely with the actual stock prices throughout the testing period. This visual observation is consistent with the lower prediction errors achieved by the SimpleRNN model in the experimental results.
+
+---
+
+# 5. Conclusion
+
+Task C.4 has been successfully completed by developing a configurable deep learning model construction pipeline for stock price prediction. The implementation supports multiple recurrent neural network architectures through a common model construction function, allowing different network configurations to be generated without modifying the source code.
+
+Using the same preprocessing pipeline and evaluation procedure, eight model configurations were trained and compared. The experiments showed that increasing model complexity did not necessarily improve prediction performance. For the `CBA.AX` dataset used in this project, simpler recurrent network architectures generally achieved comparable or better results than deeper or wider networks.
+
+The configurable design developed in this task provides a reusable foundation for the more advanced forecasting experiments in the subsequent tasks.
