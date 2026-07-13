@@ -145,3 +145,47 @@ C5_SWEEP_CONFIGS = {
         "cell_type": "GRU",
     },
 }
+
+# ==============================================================================
+# TASK C.7 NEWS CONFIGURATION
+# ==============================================================================
+C7_DATA_DIR = DATA_DIR / "c7"
+
+BIGQUERY_TABLE = "gdelt-bq.gdeltv2.gkg_partitioned"
+
+COMPANY_QUERY = "commonwealth bank"
+
+NEWS_COLUMNS = [
+    "DATE",
+    "SourceCommonName",
+    "DocumentIdentifier",
+    "V2Organizations",
+    "V2Themes",
+    "V2Tone",
+    "GCAM",
+]
+
+GDELT_TABLE = "gdelt-bq.gdeltv2.gkg_partitioned"
+GDELT_COMPANY_QUERY = "commonwealth bank"
+
+GDELT_START_DATE = START_DATE
+GDELT_END_DATE = END_DATE
+
+GDELT_RAW_CACHE_PATH = C7_DATA_DIR / "gdelt_cba_raw.parquet"
+GDELT_METADATA_PATH = C7_DATA_DIR / "gdelt_cba_metadata.json"
+
+GDELT_DAILY_V2TONE_PATH = C7_DATA_DIR / "gdelt_daily_v2tone.parquet"
+
+MARKET_TIMEZONE = "Australia/Sydney"
+
+# ----- FinBERT Settings -----
+FINBERT_MODEL_NAME = "ProsusAI/finbert"
+FINBERT_BATCH_SIZE = 64
+FINBERT_MAX_LENGTH = 128
+GDELT_ENRICHED_CACHE_PATH = C7_DATA_DIR / "gdelt_cba_enriched.parquet"
+GDELT_FINBERT_ARTICLE_PATH = C7_DATA_DIR / "gdelt_finbert_article.parquet"
+GDELT_FINBERT_CHECKPOINT_PATH = C7_DATA_DIR / "gdelt_finbert_checkpoint.parquet"
+
+
+
+

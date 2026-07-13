@@ -81,6 +81,44 @@ def plot_hybrid_predictions(index, y_true, y_gru, y_arima, y_hybrid, label, save
     plt.close(fig)
     print(f"[C.6 Plot] Saved prediction plot to: {save_path.as_posix()}")
 
+def run_adf_test(series, name="Close"):
+    """
+    Run Augmented Dickey-Fuller (ADF) test for stationarity on a series.
+    
+    Args:
+        series: pandas.Series containing time series data.
+        name: str representing the series name.
+        
+    Returns:
+        dict: ADF test results containing test_statistic, p_value, used_lag,
+              n_observations, critical_values, and is_stationary.
+    """
+    from statsmodels.tsa.stattools import adfuller
+    # Drop NaN values to avoid ADF test error
+    series_clean = series.dropna()
+    
+    # Run the ADF test
+    result = adfuller(series_clean)
+    
+    # Extract results
+    test_statistic = result[0]
+    p_value = result[1]
+    used_lag = result[2]
+    n_observations = result[3]
+    critical_values = result[4]
+    
+    # Stationary if p-value is less than significance level (0.05)
+    is_stationary = p_value < 0.05
+    
+    return {
+        "test_statistic": test_statistic,
+        "p_value": p_value,
+        "used_lag": used_lag,
+        "n_observations": n_observations,
+        "critical_values": critical_values,
+        "is_stationary": is_stationary
+    }
+
 def main():
     print("=" * 80)
     print("STARTING TASK C.6 HYBRID RESIDUAL-LEARNING EXPANDED SWEEP")
@@ -106,6 +144,70 @@ def main():
     
     df = data["df"]
     scaler = data["column_scaler"]["adjclose"]
+
+    # Define training history ending at the last training input date (prevents lookahead leakage)
+    train_history = df.loc[:data["train_input_dates"][-1], "adjclose"]
+
+    # --------------------------------------------------------------------------
+    # Step 1b: Run ADF Stationarity Check on Close Prices (Train Set Only)
+    # --------------------------------------------------------------------------
+    print("\n" + "=" * 80)
+    print("RUNNING AUGMENTED DICKEY-FULLER (ADF) STATIONARITY TEST (TRAIN SET ONLY)")
+    print("=" * 80)
+    
+    results_c6_dir = Path("results/c6")
+    results_c6_dir.mkdir(parents=True, exist_ok=True)
+    csv_c6_dir = Path("csv-results/c6")
+    csv_c6_dir.mkdir(parents=True, exist_ok=True)
+    
+    close_series = train_history
+    diff_series = close_series.diff()
+    
+    adf_original = run_adf_test(close_series, name="Original Close")
+    adf_diff = run_adf_test(diff_series, name="First-Differenced Close")
+    
+    # Save ADF results to csv-results/c6/c6_adf_stationarity.csv
+    adf_rows = []
+    for adf_res, label in [(adf_original, "Original Close"), (adf_diff, "First-Differenced Close")]:
+        adf_rows.append({
+            "Series": label,
+            "Test Statistic": adf_res["test_statistic"],
+            "p-value": adf_res["p_value"],
+            "Lags Used": adf_res["used_lag"],
+            "Observations": adf_res["n_observations"],
+            "Critical Value 1%": adf_res["critical_values"]["1%"],
+            "Critical Value 5%": adf_res["critical_values"]["5%"],
+            "Critical Value 10%": adf_res["critical_values"]["10%"],
+            "Is Stationary": adf_res["is_stationary"]
+        })
+    adf_df = pd.DataFrame(adf_rows)
+    adf_csv_path = csv_c6_dir / "c6_adf_stationarity.csv"
+    adf_df.to_csv(adf_csv_path, index=False)
+    print(f"[C.6 CSV] Saved ADF stationarity test results to: {adf_csv_path.as_posix()}")
+    
+    # Print a readable summary in the terminal
+    for row in adf_rows:
+        print(f"\nSeries: {row['Series']}")
+        print(f"  ADF Statistic:      {row['Test Statistic']:.6f}")
+        print(f"  p-value:            {row['p-value']:.6e}")
+        print(f"  Lags Used:          {row['Lags Used']}")
+        print(f"  Observations:       {row['Observations']}")
+        print(f"  Is Stationary:      {row['Is Stationary']} (p-value < 0.05)")
+        print("  Critical Values:")
+        print(f"    1%:  {row['Critical Value 1%']:.6f}")
+        print(f"    5%:  {row['Critical Value 5%']:.6f}")
+        print(f"    10%: {row['Critical Value 10%']:.6f}")
+        print("-" * 50)
+        
+    print("ARIMA Integration Justification:")
+    if not adf_original["is_stationary"] and adf_diff["is_stationary"]:
+        print("  The original series is non-stationary (p-value >= 0.05), but the first-differenced\n"
+              "  series is stationary (p-value < 0.05). This statistically justifies using a differencing\n"
+              "  parameter of d=1 in ARIMA(p,d,q).")
+    else:
+        print(f"  Original p-value: {adf_original['p_value']:.4f}, Differenced p-value: {adf_diff['p_value']:.4f}")
+        print("  ADF tests do not show the standard pattern, but d=1 is retained for consistency.")
+    print("=" * 80 + "\n")
     
     # Calculate unscaled true target prices
     y_train_unscaled = scaler.inverse_transform(data["y_train"].reshape(-1, 1)).reshape(-1)
@@ -117,8 +219,6 @@ def main():
     val_target_dates = get_target_dates(data["val_input_dates"], df, forecast_offset=1)
     test_target_dates = get_target_dates(data["test_input_dates"], df, forecast_offset=1)
     
-    # Define training history ending at the last training input date (prevents lookahead leakage)
-    train_history = df.loc[:data["train_input_dates"][-1], "adjclose"]
     print(f"[C.6 ARIMA] Training history up to {train_history.index[-1].strftime('%Y-%m-%d')} ({len(train_history)} days).")
 
     # Load GRU Baseline predictions first
@@ -154,10 +254,6 @@ def main():
 
     # ARIMA Configurations to sweep
     arima_orders = [(1, 1, 1), (2, 1, 2), (5, 1, 0)]
-    results_c6_dir = Path("results/c6")
-    results_c6_dir.mkdir(parents=True, exist_ok=True)
-    csv_c6_dir = Path("csv-results/c6")
-    csv_c6_dir.mkdir(parents=True, exist_ok=True)
 
     for order in arima_orders:
         p, d, q = order

@@ -9,93 +9,204 @@
 
 ---
 
-## Introduction
-This report documents the design, implementation, and verification of the modular data loading and processing module (`src/data_processing.py`) completed for Task C.2. The module implements a robust data pipeline supporting multi-feature datasets, local caching, missing value (NaN) imputation, multiple train/test data splitting strategies (chronological ratio, chronological date, and random splits), and column-specific MinMaxScaler scaling. The module is fully verified to run successfully on the target `CBA.AX` stock dataset.
+# 1. Introduction
+
+## 1.1 Background
+
+Stock price prediction depends not only on the forecasting model but also on how the data are prepared before training. Raw financial data often contain missing values, different feature scales, and chronological relationships that cannot be used directly by deep learning models. Without proper preprocessing, the model may produce unreliable results or suffer from data leakage, where information from the future unintentionally influences the training process.
+
+Unlike traditional machine learning datasets, stock market data are time-series data. Each prediction depends on previous observations rather than individual records. Therefore, historical stock prices must be converted into fixed-length sequences before they can be used by recurrent neural networks such as Long Short-Term Memory (LSTM) networks.
+
+To address these challenges, this project develops a reusable preprocessing pipeline that prepares raw stock market data for time-series forecasting while maintaining chronological order and preventing common sources of data leakage.
 
 ---
 
-## 1. Data Pipeline Architecture & Implementation
+## 1.2 Objectives
 
-The module is implemented in [src/data_processing.py](file:///s:/COS30018-Intelligent-System/fin-tech101/src/data_processing.py). It contains a primary function, `load_and_process_data`, structured into five distinct phases separated by professional comment dividers (`# =====` and `# -----`):
+The objective of Task C.2 is to develop a reusable function for loading and preprocessing stock market data. The preprocessing pipeline should:
 
-### 1.1 Phase 1: Local Caching & Data Loading
-To prevent API rate-limiting issues (HTTP 429) and enable offline sandboxed execution, the pipeline implements a local caching mechanism:
-* The loader looks for `{ticker}_cache.csv` or the legacy cache `{ticker}_2026-06-08.csv` in the `data/` directory.
-* If a cache is found, the file is loaded locally via `pandas.read_csv`.
-* If no cache exists, the downloader fetches live daily historical price data directly from Yahoo Finance via the `yfinance` library, saves it to the cache folder, and parses it.
-* Column headers are converted to lowercase (`open`, `high`, `low`, `close`, `adjclose`, `volume`) to standardize remapping between different sources.
-* Slices the dataframe based on the user-specified `start_date` and `end_date` bounds.
+- Load stock data within a user-defined date range.
+- Handle missing (NaN) values.
+- Provide different train-test splitting methods.
+- Save downloaded data locally to reduce repeated downloads.
+- Scale feature values for deep learning models.
 
-### 1.2 Phase 2: Missing Value (NaN) Imputation
-Financial time-series data can contain missing values due to market holidays or data collection anomalies. The pipeline handles NaNs using:
-1. **Forward Fill (`ffill`)**: Propagates the last observed valid price forward. This represents the most logical economic assumption (if the market was closed or data was missing, the asset price remains unchanged from the last transaction).
-2. **Backward Fill (`bfill`)**: Used as a fallback to handle any NaNs present at the beginning of the series (before any valid prices have been observed).
-
-### 1.3 Phase 3: Column-Specific Feature Scaling
-Instead of applying a single scaler to the entire dataset (which would collapse the variance of high-volume columns or distort price ranges), features are scaled independently:
-* Each column in the specified `feature_columns` is scaled to the range `[0, 1]` using a separate `MinMaxScaler` object.
-* The MinMaxScaler objects are stored in a dictionary `column_scaler` keyed by column name (e.g. `column_scaler["adjclose"]`).
-* Storing the scalers in a dictionary ensures they are preserved for future use, allowing unscaled predictions to be reconstructed during model evaluation without scaling leakage.
-
-### 1.4 Phase 4: Sequence Construction
-To feed data into recurrent neural networks (RNNs/LSTMs), 2D time-series indices must be restructured into 3D temporal arrays:
-* Slices sliding sequences of length $N$ (e.g. 50 lookback days).
-* Settle the prediction target by shifting `adjclose` forward by `lookup_step` days to represent future targets.
-* Slices the tail sequence (`last_sequence`) containing the latest $N$ days of price data (used for future forecasts) before dropping target NaNs.
-* Discards the final `lookup_step` rows (which contain NaNs in the shifted `future` column) to clean up training sequences.
-
-### 1.5 Phase 5: Train/Test Splitting Strategies
-To support rigorous model evaluation and prevent data leakage, the pipeline implements three split methods:
-1. **Chronological split by ratio (`split_by_date=True, split_date=None`)**: Slices the first $X\%$ of temporal samples (e.g. 80%) for training and the remaining for testing.
-2. **Chronological split by date (`split_by_date=True, split_date="YYYY-MM-DD"`)**: Slices all sequences before the split date for training, and all sequences after for testing.
-3. **Random split (`split_by_date=False`)**: Uses scikit-learn's `train_test_split` to randomly partition samples.
+The final output should be a clean, reusable, and model-ready dataset that can be used for stock price prediction.
 
 ---
 
-## 2. Methodological Analysis & Justification
+# 2. Data Processing Pipeline
 
-### 2.1 The Danger of Shuffled Random Splits (Data Leakage)
-In standard machine learning tasks, a random split of training and testing data is preferred to ensure that both sets represent the same statistical distribution. However, in time-series forecasting, **random splitting is highly inappropriate and violates SOLID principles**:
-* **Lookahead Bias / Temporal Leakage**: A random split destroys the chronological order of time-series data. If a sequence from day $t$ (consisting of observations from $t-49$ to $t$) is randomly assigned to the training set, and a sequence from day $t+1$ is assigned to the test set, the model will train on day $t+1$'s target during the training phase. When evaluated on the test set for day $t$, the model has already memorized the future price action, inflating the test performance.
-* **Economic Fallacy**: In real-world trading, models must predict future prices using only past information. A model trained on a random split cannot be deployed in practice because it relies on looking ahead to future data points that do not yet exist.
-* **Chronological split** is the only correct method for time-series validation. It trains the model strictly on past history and evaluates it on unseen future data.
+To satisfy the requirements of Task C.2, a seven-phase preprocessing pipeline was developed. Each phase performs one specific task, making the code easier to understand, maintain, and reuse.
 
-### 2.2 Feature-Specific Scaling vs. Global Scaling
-Applying a global scaler across all feature columns (e.g. scaling Close and Volume together) leads to numerical stability issues:
-* Stock prices are valued in hundreds of dollars, while trading volume is measured in millions of shares.
-* A global scaler would scale volume values to `[0, 1]`, which would squash all price values close to zero.
-* Standardizing scaling per feature using independent `MinMaxScaler` objects guarantees that all variables reside within identical bounds `[0, 1]`, allowing the LSTM network to learn relationships across columns without gradients being dominated by high-magnitude variables.
+The overall workflow is shown below.
 
----
-
-## 3. Verification Log
-
-To verify the correctness of the modular data processor, we ran a Python verification script that loads the cached `CBA.AX` dataset, processes it using a 50-day lookback sequence, and splits it chronologically with an 80/20 ratio:
-
-```powershell
-.venv\Scripts\python.exe -c "from src.data_processing import load_and_process_data; data = load_and_process_data('CBA.AX', '2020-01-01', '2024-07-02'); print(data['X_train'].shape); print(data['X_test'].shape); print(data['column_scaler'].keys())"
-```
-
-### Verification Console Output
 ```text
-[Data Cache] Loading local cache: data\CBA.AX_cache.csv
-(870, 50, 5)
-(218, 50, 5)
-dict_keys(['adjclose', 'volume', 'open', 'high', 'low'])
+Raw Stock Data
+       │
+       ▼
+Phase 1: Loading Data
+       │
+       ▼
+Phase 2: Data Cleaning
+       │
+       ▼
+Phase 3: Creating Training Sequences
+       │
+       ▼
+Phase 4: Dataset Splitting
+       │
+       ▼
+Phase 5: Feature Scaling
+       │
+       ▼
+Phase 6: Preparing the Output
 ```
 
-#### Terminal Execution Screenshot
-![Terminal Execution Screenshot](screenshots/c2_terminal.png)
-
-### Output Interpretation
-1. **Cache Loading**: The pipeline successfully detected and loaded the cached file [CBA.AX_cache.csv](file:///s:/COS30018-Intelligent-System/fin-tech101/data/CBA.AX_cache.csv), avoiding API network requests.
-2. **Train/Test Slices**: 
-   * Slices 870 training sequences of shape `(50, 5)` (50 lookback days, 5 feature columns).
-   * Slices 218 test sequences.
-   * This matches the 80/20 chronological ratio split (total 1088 sequences).
-3. **Scaler Retention**: The `column_scaler` dictionary contains five distinct `MinMaxScaler` objects, confirming that the pipeline scaled each column independently and stored the parameters for subsequent inverse scaling.
+The following sections describe each phase in detail.
 
 ---
 
-## 4. Conclusion
-Task C.2 has been successfully completed. We implemented a robust, modular, and non-overengineered time-series data processing pipeline in `src/data_processing.py`. By isolating scaling parameters per feature and supporting strict chronological splits, the pipeline prevents data leakage and satisfies all requirements. The codebase is clean and ready for transition to the advanced visualizations of Task C.3.
+## 2.1 Phase 1 – Loading Data
+
+The pipeline begins by loading historical stock data. If a local cache is available, it loads the cached data; otherwise, it downloads the data from Yahoo Finance and saves a local copy for future use. Users can specify the stock ticker together with the desired start and end dates, allowing different time periods to be used without changing the source code. The output of this phase is the raw historical stock dataset.
+
+---
+
+## 2.2 Phase 2 – Cleaning Data
+
+The raw dataset is cleaned before any further processing.
+
+First, the column names are converted into a consistent format and checked to ensure that all required features are available. The pipeline sorts the data into chronological order.
+
+Missing values are handled using forward-fill, where each missing value is replaced with the most recent available value. This keeps the time series continuous while avoiding unnecessary data loss.
+
+The output of this phase is a clean and standardized stock dataset.
+
+---
+
+## 2.3 Phase 3 – Creating Training Sequences
+
+Deep learning models such as LSTM do not learn from individual trading days. Instead, they learn from sequences of historical observations.
+
+The pipeline creates overlapping sliding windows using a fixed lookback period. Each window becomes one training sample, where the historical data are used as the input features and the stock price immediately after the window becomes the corresponding label.
+
+For example, if the lookback window contains 50 trading days:
+
+```text
+Sample 1
+
+Features
+Day 1
+Day 2
+...
+Day 50
+
+↓
+
+Label
+Day 51
+```
+
+The window then moves forward by one trading day to create the next sample.
+
+```text
+Sample 2
+
+Features
+Day 2
+Day 3
+...
+Day 51
+
+↓
+
+Label
+Day 52
+```
+
+This process continues until the end of the dataset, producing a collection of training samples that preserve the chronological order of the original stock prices. These samples can then be used to train recurrent neural networks such as LSTM.
+
+---
+
+## 2.4 Phase 4 – Dataset Splitting
+
+After all training sequences have been generated, they are first divided into **training** and **testing** datasets. Unlike conventional machine learning datasets, stock price prediction is a time-series problem where each prediction depends on historical observations. Therefore, the pipeline constructs **all valid sliding-window samples** before assigning each sample to a dataset.
+
+Instead of assigning samples based on the final day contained in the input window, the pipeline assigns them according to the **prediction target date**. This ensures that the model is always evaluated on future data while preserving the complete historical context required for each prediction.
+
+For example, suppose a lookback window contains 50 trading days:
+
+```text
+Input Window
+
+Day 651
+...
+Day 700
+
+↓
+
+Prediction Target
+
+Day 701
+```
+
+Although the input window contains historical observations before the split boundary, the sample belongs to the testing dataset because its prediction target is Day 701.
+
+For a single-step prediction, each sample has only one prediction target. The splitting rule is therefore straightforward:
+
+```python
+train_mask = target_date < split_date
+test_mask  = target_date >= split_date
+```
+
+The pipeline is also designed to support future extensions to multi-step forecasting, where one input window predicts multiple future trading days. In this case, a sample is included only if **all** of its prediction targets belong entirely to either the training or testing period. Samples whose prediction targets span both sides of the split boundary are discarded so that every sample belongs entirely to one dataset.
+
+```python
+first_target_date = target_dates[:, 0]
+last_target_date  = target_dates[:, -1]
+
+train_mask = last_target_date < split_date
+test_mask  = first_target_date >= split_date
+```
+
+After the training and testing datasets have been created, the validation dataset is obtained by taking the most recent portion of the training data. This preserves the chronological ordering of the data while allowing the model to be validated using observations that occur later than the training samples.
+
+---
+
+## 2.5 Phase 5 – Feature Scaling
+
+The input features are scaled using Min-Max normalization before they are passed to the neural network. To avoid data leakage, the Min-Max scalers are fitted **only on the training data**. The fitted scalers are then used to transform the validation and testing datasets. 
+
+```text
+Training Data
+      │
+      ▼
+Fit Min-Max Scalers
+      │
+      ├────────► Scale Training Data
+      ├────────► Scale Validation Data
+      └────────► Scale Testing Data
+```
+
+The fitted scalers are also saved so they can be reused later without fitting them again. 
+
+---
+
+## 2.6 Phase 6 – Preparing the Output
+
+Finally, the pipeline returns all processed data needed for model training and evaluation.
+
+The returned data include:
+
+- Training, validation, and testing feature tensors.
+- Corresponding target values.
+- The cleaned stock dataset.
+- Input and target dates for each sequence.
+- The latest lookback window for future prediction.
+- The fitted feature scalers.
+
+By returning everything in a single data package, the preprocessing pipeline provides a consistent interface for later forecasting tasks while keeping data preparation separate from model implementation.
+
+---
+

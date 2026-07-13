@@ -1,8 +1,8 @@
-# FinTech101: A Modular Deep Learning Framework for Stock Price Forecasting
+# FinTech101: A Modular Machine Learning Framework for Stock Price Prediction
 
 ## 📌 Overview
 
-FinTech101 is a modular deep learning project for forecasting stock prices from historical market data. It provides a reusable workflow for preparing datasets, developing forecasting models, evaluating prediction performance, and comparing experimental results.
+FinTech101 is a modular machine learning framework for stock price prediction that combines historical market data with external financial news and financial analysis. The project provides reusable pipelines for data acquisition, preprocessing, visualization, deep learning, statistical forecasting, hybrid models, and sentiment-enhanced classification.
 
 The project was developed for **COS30018 – Intelligent Systems (Project Option C)** by progressively extending the original **v0.1** and **P1** implementations into a maintainable and extensible machine learning codebase.
 
@@ -32,6 +32,10 @@ Compares forecasting models using prediction accuracy, price movement direction,
 
 Organises the forecasting workflow into reusable components that can be maintained and extended independently.
 
+### 6. External Sentiment Integration
+
+Incorporates external financial news from GDELT, employing rule-based V2Tone sentiment and transformer-based FinBERT classifications to improve stock price direction prediction.
+
 ---
 
 ## 📂 Repository Structure
@@ -43,9 +47,9 @@ fin-tech101/
 ├── baselines/                  # Modified, executable Option C codebases
 ├── references/                 # Original Option C codebases
 ├── data/                       # Cached datasets
-├── docs/                       # Assignment resources
-├── results/                    # Generated artefacts (c1-c6 weights/plots)
-├── csv-results/                # Evaluation outputs (c1, c4, c5, c6 CSVs)
+│   └── c7/                     # C.7 intermediate and aligned datasets
+├── results/                    # Generated artefacts (weights/plots)
+├── csv-results/                # Evaluation outputs (CSVs)
 ├── src/                        # Core pipeline
 │   ├── utils/                  # Shared utilities
 │   │   ├── __init__.py         # Package marker
@@ -60,8 +64,20 @@ fin-tech101/
 │   ├── base_sweep.py           # Sweep framework
 │   ├── run_c4_sweeps.py        # Hyperparameter sweeps
 │   ├── run_c5_sweeps.py        # Advanced forecasting
-│   ├── run_c6_ensemble.py      # Preliminary ensembling experiments
-│   └── run_c6_hybrid.py        # Hybrid residual-learning sweeps
+│   ├── run_c6.py               # Hybrid residual-learning and ensemble sweeps
+│   ├── run_c7.py               # C.7 workflow orchestrator
+│   ├── c7_news_data.py         # GDELT GKG news downloader
+│   ├── c7_news_titles.py       # GDELT GDG headline enrichment joiner
+│   ├── c7_news_features.py     # V2Tone daily sentiment aggregator
+│   ├── c7_news_alignment.py    # V2Tone timezone searchsorted aligner
+│   ├── c7_finbert_features.py  # FinBERT article headlines sentiment inference
+│   ├── c7_finbert_daily.py     # FinBERT timezone daily aggregation & alignment
+│   ├── c7_dataset.py           # Final classification dataset builder
+│   ├── c7_preprocessing.py     # Chronological train/val/test data splitter
+│   ├── c7_baseline.py          # Logistic Regression experiments sweep
+│   ├── c7_feature_audit.py     # Diagnostics collinearity & VIF audit
+│   ├── c7_v2tone_experiment.py # Baseline V2Tone classification experiment
+│   └── c7_reduced_v2tone_experiment.py # Validation-set reduced V2Tone experiment
 ├── requirements.txt            # Project dependencies
 └── README.md                   # You are here
 ```
@@ -169,7 +185,7 @@ python src/run_c5_sweeps.py
 ### 11. Run Hybrid Residual-Learning Experiments
 
 ```bash
-python src/run_c6_hybrid.py
+python src/run_c6.py
 ```
 
 **Primary Outputs**
@@ -185,6 +201,25 @@ python src/run_c6_hybrid.py
   - Simulated trading performance metrics
 
 
+### 12. Run Task C.7 Sentiment-Enhanced Classification Experiments
+
+```bash
+python src/run_c7.py
+```
+
+**Primary Outputs**
+
+- `data/c7/`
+  - Final classification dataset (`c7_dataset.parquet`)
+  - Aligned daily sentiment features (`gdelt_v2tone_aligned.parquet`, `gdelt_finbert_aligned.parquet`)
+
+- `csv-results/c7/`
+  - Consolidated comparative metrics (`c7_logistic_comparison.csv`)
+
+- `results/c7/`
+  - Test-set evaluation confusion matrices (PNGs)
+
+
 ---
 
 ## 📔 Option C Task Mapping
@@ -198,8 +233,8 @@ The table below maps each Project Option C task to its primary implementation an
 | **C.3 Data Visualisation**   | `src/visualization.py`                                                                             | Candlestick charts and moving boxplots                                             |
 | **C.4 Deep Learning Models** | `src/model_factory.py`, `src/train.py`, `src/test.py`, `src/base_sweep.py`, `src/run_c4_sweeps.py` | Trained model weights, prediction results, evaluation metrics, and sweep summaries |
 | **C.5 Advanced Forecasting** | `src/data_processing.py`, `src/test.py`, `src/run_c5_sweeps.py`                                    | Multivariate and multi-step forecasting experiment results                         |
-| **C.6 Ensemble Learning**    | `src/run_c6_hybrid.py`, `src/run_c6_ensemble.py`                                                   | Hybrid residual-learning forecasting pipeline, prediction plots, model weights, and consolidated evaluation metrics.              |
-| **C.7 Independent Research** | *(Planned)*                                                                                        | Research extension implementation and supporting artefacts                         |
+| **C.6 Ensemble Learning**    | `src/run_c6.py`                                                                                    | Hybrid residual-learning forecasting pipeline, prediction plots, model weights, and consolidated evaluation metrics.              |
+| **C.7 Independent Research** | `src/run_c7.py`, `src/c7_news_data.py`, `src/c7_news_titles.py`, `src/c7_news_features.py`, `src/c7_news_alignment.py`, `src/c7_finbert_features.py`, `src/c7_finbert_daily.py`, `src/c7_dataset.py`, `src/c7_preprocessing.py`, `src/c7_baseline.py` | Parsed daily and aligned news datasets, FinBERT prediction caches, standardized Logistic Regression classifiers, metrics comparisons, and confusion matrices. |
 
 ---
 

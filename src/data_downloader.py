@@ -79,8 +79,22 @@ def download_real_stock_data(
     quote = quotes[0]
     adjclose_list = adjclose_entries[0].get("adjclose", [])
 
-    # Convert timestamps to string dates
-    dates = pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None).normalize()
+    # Convert timestamps to local exchange dates
+    # We retrieve the exchange timezone from the Yahoo response metadata to prevent
+    # calendar shift issues (e.g., Australian trading sessions shifting backward to Sunday when using UTC).
+    exchange_timezone = result.get("meta", {}).get("exchangeTimezoneName")
+
+    if not exchange_timezone:
+        raise ValueError(
+            f"Yahoo Finance did not provide an exchange timezone for '{ticker}'."
+        )
+
+    dates = (
+        pd.to_datetime(timestamps, unit="s", utc=True)
+        .tz_convert(exchange_timezone)
+        .tz_localize(None)
+        .normalize()
+    )
 
     # --------------------------------------------------------------------------
     # Phase 3: DataFrame Construction & Cleaning
