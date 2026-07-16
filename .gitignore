@@ -11,8 +11,8 @@ csv-results/c*/*.csv
 
 *.joblib
 
+.claude/
 docs/*
-wiki/*
-
+!docs/*.md
 .ipynb_checkpoints/
 .env
