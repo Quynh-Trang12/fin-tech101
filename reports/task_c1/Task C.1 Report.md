@@ -1,4 +1,4 @@
-# Option C - Task C.1 Setup and Verification Report
+# Option C Weekly Report: Task C.1 - Setup and Verification
 
 ## Project Details
 
@@ -6,7 +6,7 @@
 * **Subject:** COS30018 – Intelligent Systems
 * **Task:** Option C – Task C.1: Setup and Verification
 * **Target Stock:** Commonwealth Bank of Australia (`CBA.AX`)
-* **Report Date:** 23 June 2026
+* **Report Due:** Week 3
 
 ---
 
