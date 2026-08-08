@@ -1,122 +1,159 @@
-# Option C - Task C.5 Machine Learning 2 Report
+# Option C Weekly Report: Task C.4 - Machine Learning (Phase 2)
 
 ## Project Details
 - **Project:** FinTech101 Stock Price Prediction System
 - **Subject:** COS30018 - Intelligent Systems
 - **Task:** Option C - Task C.5: Machine Learning 2 - Multivariate & Multistep Stock Price Forecasting
 - **Target Ticker:** Commonwealth Bank of Australia (`CBA.AX`)
-- **Report Date:** 22 June 2026
+- **Report Due:** Week 7
 
 ---
 
 # Introduction
 
-In Task C.4, multiple recurrent neural network architectures were systematically evaluated to identify the most effective deep learning model for stock price prediction. Based on the experimental results, the **Gated Recurrent Unit (GRU)** architecture achieved the best overall prediction accuracy and was therefore selected as the baseline deep learning model for subsequent tasks.
+In Task C.4, the **Gated Recurrent Unit (GRU)** architecture achieved the best overall prediction accuracy among the recurrent networks evaluated and was selected as the baseline model for subsequent tasks.
 
-Building upon this baseline, Task C.5 extends the forecasting framework by introducing two additional capabilities:
+Task C.5 extends that baseline with two capabilities:
 
-- **Multistep prediction**, where the model predicts multiple future stock prices from a single historical input sequence.
-- **Multivariate prediction**, where multiple market features are used simultaneously as model inputs instead of relying solely on the adjusted closing price.
+- **Multistep prediction** — predicting several future prices from one historical input sequence.
+- **Multivariate prediction** — using multiple market features as input instead of only the adjusted closing price.
 
-To support these capabilities, the existing data processing, model construction, training, and evaluation pipelines were extended while maintaining a unified and reusable implementation. The GRU architecture identified in Task C.4 was retained throughout all experiments so that the impact of multivariate inputs and multistep forecasting could be evaluated independently of changes to the underlying neural network architecture.
+The existing data processing, model construction, training, and evaluation pipelines were extended to support both, through configurable function parameters rather than separate implementations per scenario. The GRU architecture from Task C.4 was retained throughout so the effect of multivariate inputs and multistep forecasting could be isolated from architecture changes.
 
-Three forecasting configurations were evaluated using historical **Commonwealth Bank of Australia (CBA.AX)** stock data:
+Three configurations were evaluated on historical **Commonwealth Bank of Australia (CBA.AX)** data:
 
 1. **Univariate Multistep**
 2. **Multivariate Single-Step**
 3. **Multivariate Multistep**
 
-The objective of this task is to investigate how multivariate inputs and multistep forecasting influence prediction accuracy and trading performance when using the best-performing recurrent neural network architecture identified in Task C.4. Model performance is evaluated using regression metrics (MAE, RMSE, and MAPE), directional accuracy, and simulated trading results to assess both forecasting accuracy and practical usefulness.
+Each was scored on four metrics, plus simulated trading performance:
+
+1. **Mean Absolute Error (MAE)**
+2. **Root Mean Squared Error (RMSE)**
+3. **Mean Absolute Percentage Error (MAPE)**
+4. **Directional Accuracy (DA)**
 
 ---
 
 # 1. Implementation
 
-Task C.5 extends the stock prediction framework developed in Task C.4 by supporting two new forecasting capabilities:
-
-- **Multistep prediction**, where the model predicts multiple future stock prices from a single historical input sequence.
-- **Multivariate prediction**, where multiple stock features are used as inputs instead of only the adjusted closing price.
-
-Rather than creating separate implementations for each forecasting scenario, the existing data processing, model construction, training, and evaluation pipelines were extended so that both the number of input features and the prediction horizon can be configured through function parameters.
-
----
-
 ## 1.1 Multistep Prediction
 
-In previous tasks, the model predicted only one future stock price. Given a historical sequence of 50 trading days, the model produced a single prediction for the next trading day.
+Previously, the model predicted one future price from a 50-day input window. Task C.5 extends this to **multi-output forecasting**, where the same window produces several future prices at once:
 
-```text
-Input (50 days)
-↓
-
-Prediction
-Day t+1
+```mermaid
+flowchart TD
+    A["Input (50 days)"] --> B["Day t+1"]
+    A --> C["Day t+2"]
+    A --> D["Day t+3"]
+    A --> E["Day t+4"]
+    A --> F["Day t+5"]
 ```
 
-For Task C.5, the framework was extended to support **multi-output forecasting**. Instead of predicting only one value, the model can now predict multiple future closing prices simultaneously.
+This is controlled by a new parameter, `future_steps`:
 
-```text
-Input (50 days)
-↓
+- **Preprocessing:** the target is expanded into a vector of future prices by shifting the adjusted closing price multiple times.
+- **Model:** the output layer is resized from `Dense(1)` to `Dense(future_steps)`, so one forward pass produces every step.
 
-Predictions
-
-Day t+1
-Day t+2
-Day t+3
-Day t+4
-Day t+5
-```
-
-This functionality is controlled by a new parameter called `future_steps`. During data preprocessing, the target variable is expanded by shifting the adjusted closing price multiple times to create a vector of future prices. During model construction, the output layer is resized from a single neuron (`Dense(1)`) to `Dense(future_steps)`, allowing the network to produce multiple predictions in a single forward pass.
-
-This project adopts a **direct multi-output forecasting** approach. Unlike **recursive forecasting**, which predicts one future value at a time and repeatedly uses previous predictions to forecast subsequent days, the direct approach predicts the entire forecast horizon simultaneously. This avoids the accumulation of prediction errors that can occur when predicted values are repeatedly fed back into the model.
+This is a **direct multi-output** approach, not a **recursive** one: all `future_steps` days are predicted simultaneously in a single pass, rather than predicting one day and feeding that prediction back in to predict the next. This avoids compounding prediction errors across the horizon.
 
 ---
 
 ## 1.2 Multivariate Prediction
 
-The original implementation used only the adjusted closing price (`adjclose`) as the model input. While this simplifies the prediction task, it ignores other information available in the historical market data.
+The original implementation used only the adjusted closing price (`adjclose`) as model input. Task C.5 extends this to all six features named in the task brief:
 
-For Task C.5, the framework was extended to accept multiple input features. The model can now be trained using:
+| Feature | Column |
+| :--- | :--- |
+| Adjusted Close | `adjclose` |
+| Close | `close` |
+| Volume | `volume` |
+| Open | `open` |
+| High | `high` |
+| Low | `low` |
 
-- Adjusted Close (`adjclose`)
-- Volume (`volume`)
-- Open (`open`)
-- High (`high`)
-- Low (`low`)
-
-Each feature is independently scaled using its own MinMax scaler before generation of lookback windows. This ensures that variables with very different numerical ranges (such as trading volume and stock prices) contribute appropriately during model training.
-
-Because the input feature list is configurable, the same training pipeline can be used for both univariate and multivariate experiments without modifying the model implementation.
+Each feature is scaled with its own MinMax scaler before lookback windows are built, so features with very different numerical ranges (e.g. volume vs. price) contribute appropriately during training. Because the feature list is configurable, the same pipeline serves both univariate and multivariate experiments without changing the model implementation.
 
 ---
 
 ## 1.3 Combined Multivariate and Multistep Prediction
 
-The final experiment combines both extensions into a single forecasting model.
+The final experiment combines both extensions: a 50-day window of all six features predicts the adjusted closing price for the next five trading days.
 
-Each training sample consists of a 50-day historical window containing five input features:
-
-```text
-50 Trading Days
-
-×
-
-(adjclose, volume, open, high, low)
+```mermaid
+flowchart TD
+    A["50 Trading Days × 6 Features"] --> B["GRU Model"]
+    B --> C["Day t+1 … Day t+5"]
 ```
 
-The model then predicts the adjusted closing price for the next five trading days:
+No additional model architecture was needed beyond Sections 1.1 and 1.2 — input dimensionality and prediction horizon are both just configuration values, so the same pipeline directly supports this combined case.
 
-```text
-Day t+1
-Day t+2
-Day t+3
-Day t+4
-Day t+5
+---
+
+## 1.4 Less-Straightforward Code Explanation
+
+This section explains the lines of `src/data_processing.py` and `src/test.py` that were not immediately obvious to write for multivariate and multistep forecasting, focusing on those that required research. Sources consulted are cited in text and listed in the References section.
+
+**1. Building multiple future targets with a per-step shift**
+
+```python
+for step in range(future_steps):
+    shift_amount = forecast_offset + step
+    target_col = f"future_{step}"
+    df[target_col] = df[TARGET_COLUMN].shift(-shift_amount)
 ```
 
-Since both the input dimensionality and prediction horizon are configurable, no additional model architecture was required beyond the modifications introduced in Sections 1.1 and 1.2. The same training and evaluation pipelines are reused across all experiments, allowing direct comparisons between univariate, multivariate, single-step, and multistep forecasting configurations.
+`add_future_targets()` in `src/data_processing.py` creates one labelled column per forecast day rather than one column total. Pandas' `Series.shift(-n)` moves each value `n` rows earlier, so `shift(-1)` aligns tomorrow's price with today's row (Pandas Development Team, 2024). Looping `step` from `0` to `future_steps - 1` and adding `forecast_offset` to each shift produces a contiguous block of targets — `future_0` is the price at `t + forecast_offset`, `future_1` is `t + forecast_offset + 1`, and so on — which is what allows `future_steps` to control the forecast horizon as a single configuration value instead of a hardcoded number of label columns.
+
+**2. Checking both ends of the target-date range at the split boundary**
+
+```python
+first_target_dates = pd.to_datetime(target_dates[:, 0])
+last_target_dates = pd.to_datetime(target_dates[:, -1])
+
+train_mask = last_target_dates < split_timestamp
+test_mask = first_target_dates >= split_timestamp
+```
+
+When `future_steps > 1`, a single training sample's targets span a *range* of dates (e.g. predicting five consecutive days), not one date. If that range straddles the chronological split boundary — some predicted days before it, some after — the sample would leak future information into training. `split_sequences_by_target_date()` in `src/data_processing.py` checks the **earliest** and **latest** target date of every sample and assigns a sample to training only if its last target is still before the split date, and to testing only if its first target is on or after it. Samples whose horizon crosses the boundary are dropped entirely, which is why the console prints a "Dropped N boundary sample(s)" message when this occurs. This generalises the single-step leakage check to any forecast horizon.
+
+**3. Fitting one scaler per feature, with the target column combining two sources**
+
+```python
+for feature_index, column in enumerate(feature_columns):
+    historical_values = X_train[:, :, feature_index].reshape(-1, 1)
+
+    if column == TARGET_COLUMN:
+        target_values = y_train.reshape(-1, 1)
+        fit_values = np.vstack([historical_values, target_values])
+    else:
+        fit_values = historical_values
+
+    scaler = MinMaxScaler()
+    scaler.fit(fit_values)
+```
+
+Multivariate inputs mean the model now has six feature channels (`adjclose`, `close`, `volume`, `open`, `high`, `low`) with very different numerical ranges — trading volume is on the order of millions, while prices are two- or three-digit numbers. `fit_training_scalers()` fits a **separate** `MinMaxScaler` per column, using only that column's slice of the 3‑D training window array (`X_train[:, :, feature_index]`). scikit-learn's `MinMaxScaler` expects two-dimensional input, so `.reshape(-1, 1)` flattens each feature's window values into a single column before fitting (scikit-learn Developers, 2024). The `adjclose` scaler is the one exception: because `adjclose` appears both as a historical input and as the multistep prediction target, its scaler is fitted on historical values **and** training labels stacked together with `np.vstack()`, so a future label that exceeds every historical price still falls inside the scaler's learned range.
+
+**4. Resizing the output layer to the forecast horizon**
+
+```python
+model.add(Dense(future_steps, activation="linear"))
+```
+
+A single-step model needs one output neuron; a multistep model needs one neuron per forecast day. Because `future_steps` is passed straight into `Dense()`, `build_dl_model()` (Task C.4) needed no change to support multistep forecasting — the same function produces a five-output model simply by receiving `future_steps=5` instead of `future_steps=1`. This is the direct multi-output approach described in Section 1.1: all five days are produced by one forward pass through one `Dense` layer, rather than by five separate single-step models or by feeding predictions back into the model recursively.
+
+**5. Reporting only the first forecast step in metrics and plots**
+
+```python
+if future_steps > 1:
+    y_pred_col = "adjclose_future_0"
+    y_true_col = "true_adjclose_future_0"
+```
+
+`get_trading_profits()` and `plot_prediction_chart()` in `src/test.py` both need a single predicted price per row to run the trading simulation and draw a two-line chart, but a multistep model produces `future_steps` predictions per row. Rather than averaging across the horizon or picking an arbitrary step, the code consistently uses **step 0** — the nearest-day forecast — for both the trading simulation and the visualised prediction line. This keeps the multistep evaluation directly comparable with the single-step configurations in Table 3.1, since all three experiments are ultimately scored on their next-day forecast.
+
+---
 
 # 2. Experimental Setup
 
@@ -129,8 +166,8 @@ Three forecasting configurations were evaluated:
 | Configuration | Input Features | Prediction Horizon | Purpose |
 | :------------ | :------------- | :----------------- | :------ |
 | **Univariate Multistep** | Adjusted Close (`adjclose`) | 5 days | Evaluate the effect of predicting multiple future prices while using a single input feature. |
-| **Multivariate Single-Step** | Adjusted Close, Volume, Open, High, Low | 1 day | Evaluate whether additional market features improve single-day prediction accuracy. |
-| **Multivariate Multistep** | Adjusted Close, Volume, Open, High, Low | 5 days | Combine both multivariate inputs and multistep forecasting into a single model. |
+| **Multivariate Single-Step** | Adjusted Close, Close, Volume, Open, High, Low | 1 day | Evaluate whether additional market features improve single-day prediction accuracy. |
+| **Multivariate Multistep** | Adjusted Close, Close, Volume, Open, High, Low | 5 days | Combine both multivariate inputs and multistep forecasting into a single model. |
 
 ---
 
@@ -156,22 +193,17 @@ The historical dataset was divided chronologically into training, validation, an
 
 ## 2.3 Evaluation Metrics
 
-Each experiment was evaluated using both prediction accuracy metrics and simple trading performance metrics.
+Each experiment is scored on both prediction accuracy and simulated trading performance, since low prediction error does not guarantee a profitable trading signal.
 
-### Regression Metrics
-
-- **Mean Absolute Error (MAE):** Average absolute difference between predicted and actual stock prices.
-- **Root Mean Squared Error (RMSE):** Measures prediction error while placing greater emphasis on larger errors.
-- **Mean Absolute Percentage Error (MAPE):** Average percentage prediction error relative to the true stock price.
-
-### Directional and Trading Metrics
-
-- **Directional Accuracy (DA):** Percentage of predictions that correctly identify whether the next stock price increases or decreases.
-- **Trading Accuracy:** Percentage of simulated trades that generate a positive return.
-- **Total Trading Profit:** Overall profit obtained from the simulated trading strategy across the testing period.
-- **Profit per Trade:** Average profit or loss generated by each simulated trade.
-
-Using both regression and trading metrics provides a more comprehensive evaluation of forecasting models. A model with low prediction error does not necessarily produce profitable trading decisions if it frequently predicts the wrong price direction. Evaluating both regression accuracy and trading performance therefore provides a more balanced assessment of each forecasting configuration.
+| Metric | Measures |
+| :--- | :--- |
+| MAE | Average absolute difference between predicted and actual price |
+| RMSE | Prediction error, penalising large errors more |
+| MAPE | Prediction error as a percentage of actual price |
+| DA | How often the predicted price direction (up/down) matches reality |
+| Trading Accuracy | Percentage of simulated trades that were profitable |
+| Total Trading Profit | Overall profit from the simulated trading strategy |
+| Profit per Trade | Average profit or loss per simulated trade |
 
 
 # 3. Experimental Results and Discussion
@@ -182,95 +214,61 @@ The performance of the three GRU-based forecasting configurations is summarized 
 
 | Model | Features | Future Steps | MAE ($) | RMSE ($) | MAPE (%) | DA (%) | Trading Accuracy (%) | Total Profit ($) |
 | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **gru_uni_multistep** | `adjclose` | 5 | **1.6143** | **2.0025** | **1.55** | **49.38** | **45.61** | **-21.66** |
-| **gru_multi_singlestep** | `adjclose`, `volume`, `open`, `high`, `low` | 1 | 2.2256 | 2.5751 | 2.12 | 44.83 | 44.83 | -22.59 |
-| **gru_multi_multistep** | `adjclose`, `volume`, `open`, `high`, `low` | 5 | 4.5333 | 4.9901 | 4.32 | 39.37 | 45.61 | -23.91 |
+| **gru_uni_multistep** | `adjclose` | 5 | **1.6143** | **2.0025** | **1.55** | **49.43** | **45.61** | **-21.66** |
+| **gru_multi_singlestep** | `adjclose`, `close`, `volume`, `open`, `high`, `low` | 1 | 2.7635 | 3.0906 | 2.64 | 44.83 | 44.83 | -25.65 |
+| **gru_multi_multistep** | `adjclose`, `close`, `volume`, `open`, `high`, `low` | 5 | 3.9973 | 4.5101 | 3.80 | 39.33 | 45.61 | -23.91 |
 
 ---
 
 ## 3.2 Discussion
 
-### Univariate Multistep Prediction
+| Configuration | Ranking | Key observation |
+| :--- | :---: | :--- |
+| Univariate Multistep | 1st (best) | Lowest MAE/RMSE/MAPE and highest DA, despite using only `adjclose`. Suggests the closing price alone carries enough signal for this dataset, and that extending the horizon to 5 days doesn't hurt accuracy when the input stays simple. |
+| Multivariate Single-Step | 2nd | Adding 5 features increased error rather than reducing it. `close` is nearly identical to `adjclose` for CBA.AX outside dividend/split events, so the extra features likely added redundant or noisy signal rather than new information. |
+| Multivariate Multistep | 3rd (worst) | Largest errors of the three — combines the hardest input (6 features) with the hardest output (5 steps). Predicted curve is visibly smoother and slower to react to rapid price moves (Figure 4.3), consistent with the higher error. |
 
-Among the three forecasting configurations, the **GRU univariate multistep** model achieved the best overall performance. It produced the lowest MAE (1.6143), RMSE (2.0025), and MAPE (1.55%), while also achieving the highest Directional Accuracy (49.38%).
-
-Despite using only the adjusted closing price as its input feature, the model outperformed both multivariate configurations. This suggests that, for the CBA.AX dataset, the historical adjusted closing price alone provides sufficient information for accurate short-term forecasting when combined with the GRU architecture.
-
-Furthermore, the model predicts five future trading days simultaneously, demonstrating that extending the forecasting horizon does not necessarily reduce prediction accuracy when the underlying forecasting problem remains relatively simple.
-
----
-
-### Multivariate Single-Step Prediction
-
-The **GRU multivariate single-step** model achieved the second-best overall performance. Although additional market features (Open, High, Low, and Volume) were incorporated, the regression errors were larger than those of the univariate multistep model.
-
-One possible explanation is that these additional features provide information that is highly correlated with the adjusted closing price. Consequently, the increased input dimensionality does not produce a proportional improvement in forecasting accuracy for this dataset.
-
-Nevertheless, the model maintained competitive prediction performance and demonstrates that the proposed framework can successfully support multivariate forecasting without requiring changes to the underlying GRU architecture.
+**Trading performance:** all three configurations produced a **negative** total trading profit, and Trading Accuracy stayed in a narrow 44–46% band regardless of configuration. Even the most accurate model (univariate multistep) lost money — accurate price forecasting did not translate into a profitable trading signal. The univariate multistep configuration is retained as the baseline model for Task C.6.
 
 ---
-
-### Multivariate Multistep Prediction
-
-The **GRU multivariate multistep** model produced the largest prediction errors among the three configurations. This experiment represents the most complex forecasting task because the model must simultaneously learn relationships among multiple historical features while predicting multiple future stock prices.
-
-Compared with the other configurations, the predicted price curve is noticeably smoother and reacts more slowly to rapid market movements. This behaviour is expected because both the input space and the output space become more complex, increasing the overall learning difficulty.
-
----
-
-### Trading Performance
-
-None of the three forecasting configurations generated a profitable trading strategy. Trading Accuracy ranged from approximately 44% to 46%, while the Total Trading Profit remained negative for every experiment.
-
-Although the **GRU univariate multistep** model achieved the highest prediction accuracy and Directional Accuracy, it still produced an overall trading loss. These results demonstrate that accurate price forecasting does not necessarily translate into profitable trading decisions. Predicting future stock prices and constructing a profitable trading strategy remain related but distinct problems, particularly when relying solely on historical market data.
-
-Overall, the experimental results indicate that the **GRU univariate multistep** configuration provides the best balance between prediction accuracy and trading performance among the three evaluated forecasting strategies. These findings establish the baseline deep learning model for the ensemble forecasting methods investigated in Task C.6.
 
 # 4. Verification and Prediction Examples
 
-To verify the implementation, the three GRU-based forecasting configurations were executed using the automated experiment runner. Each model was successfully trained using the finalized preprocessing pipeline and evaluated on the independent chronological testing dataset.
+The three configurations were executed with the automated experiment runner, each training on the finalized preprocessing pipeline and evaluating on the independent chronological test set. This produced:
 
-The generated outputs include:
+- A consolidated CSV of evaluation metrics for all three configurations.
+- A prediction plot and detailed prediction CSV per configuration.
+- Saved model weights per configuration.
 
-- A consolidated CSV file summarizing the evaluation metrics for all three forecasting configurations.
-- Prediction plots illustrating the forecasting performance of each GRU model.
-- Detailed prediction CSV files containing the actual and predicted stock prices.
-- Saved model weights for each trained GRU model.
-
-The terminal execution confirmed that all experiments completed successfully and that the regenerated prediction plots and evaluation metrics are consistent with the consolidated results presented in Section 3.
-
-### Figure 4.1 – Univariate Multistep Prediction
+| Figure | Configuration | Visual behaviour |
+| :--- | :--- | :--- |
+| 4.1 | Univariate Multistep | Closely tracks the actual price and the long-term trend; smallest deviation of the three. |
+| 4.2 | Multivariate Single-Step | Tracks the trend and short-term moves reasonably well, but slightly smoother than 4.1 during volatile periods. |
+| 4.3 | Multivariate Multistep | Noticeably smoother and slower to react, especially during sustained price moves — the largest deviation from actual prices. |
 
 ![Univariate Multistep](../../results/c5/gru_uni_multistep_prediction.png)
-
-The **GRU univariate multistep** model follows the overall stock price movement closely throughout the testing period. Although the predicted curve remains smoother than the actual prices during periods of rapid market movement, it consistently captures the long-term upward trend and exhibits the smallest deviation from the ground truth among the three forecasting configurations. These observations are consistent with its superior regression performance (MAE = **1.6143**, RMSE = **2.0025**, MAPE = **1.55%**) and the highest Directional Accuracy (**49.38%**) reported in Section 3.
-
----
-
-### Figure 4.2 – Multivariate Single-Step Prediction
+*Figure 4.1 – Univariate Multistep Prediction*
 
 ![Multivariate Single-Step](../../results/c5/gru_multi_singlestep_prediction.png)
-
-The **GRU multivariate single-step** model also follows the overall market trend and responds more closely to short-term fluctuations than the multivariate multistep configuration. However, incorporating additional market features (Open, High, Low, and Volume) does not improve forecasting accuracy over the univariate model. The prediction curve remains slightly smoother than the actual prices during periods of increased volatility, which is reflected in its moderately higher regression errors.
-
----
-
-### Figure 4.3 – Multivariate Multistep Prediction
+*Figure 4.2 – Multivariate Single-Step Prediction*
 
 ![Multivariate Multistep](../../results/c5/gru_multi_multistep_prediction.png)
+*Figure 4.3 – Multivariate Multistep Prediction*
 
-The **GRU multivariate multistep** model exhibits the largest deviation from the actual stock prices. Because this configuration simultaneously processes multiple input features while predicting multiple future prices, it represents the most challenging forecasting task among the three experiments. The prediction curve is noticeably smoother and reacts more slowly to rapid price changes, particularly during sustained upward movements, resulting in the highest prediction errors observed in the evaluation.
-
-Overall, the visual comparison supports the quantitative results presented in Section 3. The **GRU univariate multistep** configuration produces the closest agreement with the actual stock prices throughout the testing period, while the multivariate multistep configuration demonstrates the greatest forecasting difficulty. These observations indicate that, for the CBA.AX dataset, increasing the complexity of both the input representation and the forecasting horizon does not necessarily improve predictive performance.
+The visual pattern matches Table 3.1: forecasting difficulty rises with input and output complexity, and for CBA.AX, the simplest configuration produced the most accurate forecasts.
 
 ---
 
-# 5. Conclusion
+# Conclusion
 
-Task C.5 has been successfully completed by extending the stock forecasting framework to support both **multivariate** and **multistep** prediction using the **GRU architecture** identified as the best-performing model in Task C.4. The implementation introduces configurable input feature sets and forecasting horizons while reusing the same preprocessing, training, and evaluation pipeline developed in the previous tasks.
+Task C.5 is complete: the framework now supports **multistep** prediction (`future_steps`) and **multivariate** prediction (six configurable input features), both reusing the Task C.2–C.4 preprocessing, training, and evaluation pipeline without architectural changes, and both combinable in a single model.
 
-Three forecasting configurations were evaluated using the same dataset and experimental settings. The results show that the **GRU univariate multistep** model achieved the best overall performance, producing the lowest prediction errors (MAE = **1.6143**, RMSE = **2.0025**, MAPE = **1.55%**) and the highest Directional Accuracy (**49.38%**). In contrast, incorporating additional market features or simultaneously increasing both the input complexity and forecasting horizon did not improve prediction accuracy for the CBA.AX dataset.
+Across the three configurations evaluated (Table 3.1), **univariate multistep** was most accurate; adding features or combining multivariate inputs with a multistep horizon did not improve accuracy for CBA.AX, and no configuration was trading-profitable. This establishes univariate multistep GRU as the baseline for Task C.6.
 
-The experiments also demonstrate that low prediction error alone does not guarantee profitable trading performance. Although the univariate multistep model produced the most accurate forecasts, all three configurations generated negative total trading profits under the simple trading simulation. This highlights the distinction between accurate price forecasting and successful trading strategy design.
+---
 
-Overall, Task C.5 demonstrates that the forecasting framework can flexibly support different prediction settings without modifying the underlying model implementation. The **GRU univariate multistep** configuration is selected as the baseline deep learning forecasting model for the hybrid and ensemble forecasting methods investigated in Task C.6.
+# References
+
+Pandas Development Team. (2024). *pandas.Series.shift*. Pandas documentation. https://pandas.pydata.org/docs/reference/api/pandas.Series.shift.html
+
+scikit-learn Developers. (2024). *sklearn.preprocessing.MinMaxScaler*. scikit-learn documentation. https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html

@@ -1,4 +1,4 @@
 Model Name,Description,Features,Future Steps,MAE ($),RMSE ($),MAPE (%),DA (%),Trading Acc (%),Total Profit ($),Profit/Trade ($)
-gru_uni_multistep,Univariate Multistep (Close Only -> 5 Days Forecast),adjclose,5,1.6143,2.0025,1.55,49.38,45.61,-21.66,-0.09
-gru_multi_singlestep,Multivariate Single-Step (All Features -> 1 Day Forecast),"adjclose, volume, open, high, low",1,2.2256,2.5751,2.12,44.83,44.83,-22.59,-0.1
-gru_multi_multistep,Multivariate Multistep Combined (All Features -> 5 Days Forecast),"adjclose, volume, open, high, low",5,4.5333,4.9901,4.32,39.37,45.61,-23.91,-0.1
+gru_uni_multistep,Univariate Multistep (Close Only -> 5 Days Forecast),adjclose,5,1.6143,2.0025,1.55,49.43,45.61,-21.66,-0.09
+gru_multi_singlestep,Multivariate Single-Step (All Features -> 1 Day Forecast),"adjclose, close, volume, open, high, low",1,2.7635,3.0906,2.64,44.83,44.83,-25.65,-0.11
+gru_multi_multistep,Multivariate Multistep Combined (All Features -> 5 Days Forecast),"adjclose, close, volume, open, high, low",5,3.9973,4.5101,3.8,39.33,45.61,-23.91,-0.1
