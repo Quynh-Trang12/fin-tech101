@@ -10,9 +10,5 @@ csv-results/*.csv
 csv-results/c*/*.csv
 
 *.joblib
-
-docs/*
-wiki/*
-
 .ipynb_checkpoints/
 .env
