@@ -5,6 +5,7 @@
 # ==============================================================================
 
 from pathlib import Path
+import argparse
 import pickle
 
 from typing import Any
@@ -19,6 +20,7 @@ from config import (
     FUTURE_STEPS,
     LOOKBACK_STEPS,
     SPLIT_DATE,
+    SPLIT_METHOD,
     START_DATE,
     TICKER,
     DATA_DIR,
@@ -149,7 +151,12 @@ def standardise_stock_dataframe(
             f"No stock rows found for {ticker} between {start_date} and {end_date}."
         )
 
+    # Forward-fill carries the last known value across a gap, which suits a
+    # price series. Backward-fill then covers a gap at the very start of the
+    # series, where forward-fill has no earlier value to copy.
     df.ffill(inplace=True)
+    df.bfill(inplace=True)
+
     df["date"] = df.index
 
     return df
@@ -282,26 +289,85 @@ def build_sequences(
 # ==============================================================================
 
 
+def resolve_split_method(
+    split_method: str | None,
+    split_by_date: bool,
+    split_date: str | None,
+) -> str:
+    """Determine which of the three Task C.2 split strategies to apply.
+
+    Task C.2 requirement (c) asks for three interchangeable strategies: split by
+    date, split by ratio, or split randomly. ``split_method`` names the strategy
+    directly. The older ``split_by_date`` flag is still honoured when
+    ``split_method`` is omitted, so existing callers keep their behaviour.
+
+    Args:
+        split_method: Requested strategy, one of ``"date"``, ``"ratio"``, or
+            ``"random"``. When ``None``, the strategy is inferred from
+            ``split_by_date`` and ``split_date``.
+        split_by_date: Legacy flag. False selects the random strategy.
+        split_date: First target date belonging to the test set. When absent,
+            chronological splitting falls back to the ratio strategy.
+
+    Returns:
+        The resolved strategy name.
+
+    Raises:
+        ValueError: If ``split_method`` is not a recognised strategy, or if the
+            ``"date"`` strategy is requested without a ``split_date``.
+    """
+    valid_methods = ("date", "ratio", "random")
+
+    if split_method is not None:
+        if split_method not in valid_methods:
+            raise ValueError(
+                f"Unsupported split_method '{split_method}'. "
+                f"Available options are: {list(valid_methods)}"
+            )
+
+        # Fail loudly rather than silently downgrading to a ratio split.
+        if split_method == "date" and split_date is None:
+            raise ValueError(
+                "split_method='date' requires a split_date. Pass a date, or "
+                "use split_method='ratio' for a chronological ratio split."
+            )
+
+        return split_method
+
+    if not split_by_date:
+        return "random"
+
+    return "date" if split_date is not None else "ratio"
+
+
 def split_sequences(
     sequence_data: dict[str, Any],
     split_by_date: bool = True,
     split_ratio: float = 0.8,
     split_date: str | None = None,
     shuffle: bool = True,
+    split_method: str | None = None,
 ) -> dict[str, np.ndarray]:
-    """Split samples into train and test sets.
+    """Split samples into train and test sets using one of three strategies.
 
-    Chronological splitting uses target dates, so a sample is placed in the test
-    set when the value being predicted belongs to the test period.
+    ``"date"`` and ``"ratio"`` both preserve chronological order and are
+    leakage-safe. ``"date"`` assigns a sample to the test set when the value
+    being predicted falls on or after ``split_date``; ``"ratio"`` takes the
+    first ``split_ratio`` fraction of samples as training data. ``"random"``
+    shuffles samples across the whole period and is provided for comparison
+    experiments only.
 
     Args:
         sequence_data: Dictionary returned by ``build_sequences``.
-        split_by_date: Use chronological splitting when true; otherwise use
-            random splitting for controlled comparison experiments.
-        split_ratio: Fraction of samples assigned to training when no explicit
-            split date is provided.
-        split_date: First target date that should belong to the test set.
+        split_by_date: Legacy flag kept for backward compatibility. Ignored when
+            ``split_method`` is given.
+        split_ratio: Fraction of samples assigned to training under the
+            ``"ratio"`` and ``"random"`` strategies.
+        split_date: First target date that should belong to the test set, used
+            by the ``"date"`` strategy.
         shuffle: Shuffle only the training samples for chronological splits.
+        split_method: Strategy name, one of ``"date"``, ``"ratio"``, or
+            ``"random"``. Defaults to the strategy implied by ``split_by_date``.
 
     Returns:
         A dictionary containing train/test arrays and their input-end dates.
@@ -312,18 +378,25 @@ def split_sequences(
     if not 0 < split_ratio < 1:
         raise ValueError("split_ratio must be between 0 and 1.")
 
+    resolved_method = resolve_split_method(
+        split_method=split_method,
+        split_by_date=split_by_date,
+        split_date=split_date,
+    )
+
     X = sequence_data["X"]
     y = sequence_data["y"]
     input_end_dates = sequence_data["input_end_dates"]
     target_dates = sequence_data["target_dates"]
 
-    if split_by_date:
+    if resolved_method in ("date", "ratio"):
+        # Passing split_date=None selects the chronological ratio split.
         split_data = split_sequences_by_target_date(
             X=X,
             y=y,
             input_end_dates=input_end_dates,
             target_dates=target_dates,
-            split_date=split_date,
+            split_date=split_date if resolved_method == "date" else None,
             split_ratio=split_ratio,
         )
 
@@ -597,6 +670,7 @@ def load_and_process_data(
     split_by_date: bool = True,
     split_ratio: float = 0.8,
     split_date: str | None = None,
+    split_method: str | None = None,
     validation_ratio: float = VALIDATION_RATIO,
     feature_columns: list[str] | None = None,
     cache_dir: Path = DATA_DIR,
@@ -618,9 +692,14 @@ def load_and_process_data(
         shuffle: Shuffle training samples after chronological splitting.
         forecast_offset: Number of trading rows between the current input end
             and the first predicted target.
-        split_by_date: Use chronological target-date split when true.
-        split_ratio: Training fraction used when no explicit split date is given.
+        split_by_date: Legacy flag kept for backward compatibility. Ignored
+            when ``split_method`` is given.
+        split_ratio: Training fraction used by the ``"ratio"`` and ``"random"``
+            split strategies.
         split_date: First target date assigned to the test set.
+        split_method: Train/test split strategy, one of ``"date"``, ``"ratio"``,
+            or ``"random"``. Defaults to the strategy implied by
+            ``split_by_date``.
         validation_ratio: Chronological validation split ratio (relative to the training set).
         feature_columns: Input feature names. Defaults to OHLCV-style features.
         cache_dir: Directory for raw stock CSV cache.
@@ -693,6 +772,7 @@ def load_and_process_data(
         split_ratio=split_ratio,
         split_date=split_date,
         shuffle=False,
+        split_method=split_method,
     )
 
     X_train_full = split_data["X_train"]
@@ -745,6 +825,7 @@ def load_and_process_data(
     # --------------------------------------------------------------------------
     result = {
         "df": df.copy(),
+        "column_scaler": None,
         "X_train_unscaled": X_train.copy(),
         "y_train_unscaled": y_train.copy(),
         "X_val_unscaled": X_val.copy(),
@@ -806,6 +887,11 @@ def load_and_process_data(
                     "end_date": end_date,
                     "split_date": split_date,
                     "split_by_date": split_by_date,
+                    "split_method": resolve_split_method(
+                        split_method=split_method,
+                        split_by_date=split_by_date,
+                        split_date=split_date,
+                    ),
                     "split_ratio": split_ratio,
                     "validation_ratio": validation_ratio,
                     "lookback_steps": lookback_steps,
@@ -856,28 +942,103 @@ def load_and_process_data(
 
 
 # ==============================================================================
+# COMMAND-LINE INTERFACE
+# ==============================================================================
+
+
+def create_arg_parser() -> argparse.ArgumentParser:
+    """Create the command-line parser for the standalone data-processing run.
+
+    Every default is read from ``config.py``, so running the script with no
+    arguments reproduces the project's configured pipeline exactly.
+    """
+    parser = argparse.ArgumentParser(
+        description="Run the Task C.2 data-processing pipeline."
+    )
+
+    argument_specs = [
+        ("--ticker", str, TICKER, "Stock ticker symbol."),
+        ("--start_date", str, START_DATE, "First date of the experiment period."),
+        ("--end_date", str, END_DATE, "Last date of the experiment period."),
+        ("--split_date", str, SPLIT_DATE, "First target date assigned to the test set."),
+        (
+            "--split_method",
+            str,
+            SPLIT_METHOD,
+            "Train/test split strategy: date, ratio, or random.",
+        ),
+        (
+            "--split_ratio",
+            float,
+            0.8,
+            "Training fraction used by the ratio and random strategies.",
+        ),
+        (
+            "--validation_ratio",
+            float,
+            VALIDATION_RATIO,
+            "Chronological validation split ratio relative to the training set.",
+        ),
+        ("--lookback_steps", int, LOOKBACK_STEPS, "Number of past time steps per window."),
+        ("--forecast_offset", int, FORECAST_OFFSET, "Prediction offset from the window."),
+        ("--future_steps", int, FUTURE_STEPS, "Number of future steps to predict."),
+        (
+            "--feature_columns",
+            str,
+            ",".join(FEATURE_COLUMNS),
+            "Comma-separated input feature list.",
+        ),
+    ]
+
+    for flag, arg_type, default, help_text in argument_specs:
+        parser.add_argument(flag, type=arg_type, default=default, help=help_text)
+
+    parser.add_argument(
+        "--no_scale",
+        action="store_true",
+        help="Skip MinMax scaling and return unscaled arrays.",
+    )
+    parser.add_argument(
+        "--no_save_scalers",
+        action="store_true",
+        help="Do not write the fitted scalers to disk.",
+    )
+
+    return parser
+
+
+# ==============================================================================
 # STANDALONE EXECUTION ENTRY POINT
 # ==============================================================================
 
 if __name__ == "__main__":
+    args = create_arg_parser().parse_args()
+
     print("=" * 80)
     print("STARTING TASK C.2 DATA PROCESSING PIPELINE")
+    print(f"Split method: {args.split_method}")
     print("=" * 80)
 
     processed_data = load_and_process_data(
-        ticker=TICKER,
-        start_date=START_DATE,
-        end_date=END_DATE,
-        lookback_steps=LOOKBACK_STEPS,
-        scale=True,
+        ticker=args.ticker,
+        start_date=args.start_date,
+        end_date=args.end_date,
+        lookback_steps=args.lookback_steps,
+        scale=not args.no_scale,
         shuffle=True,
-        forecast_offset=FORECAST_OFFSET,
-        split_by_date=True,
-        split_date=SPLIT_DATE,
-        feature_columns=FEATURE_COLUMNS,
+        forecast_offset=args.forecast_offset,
+        split_date=args.split_date,
+        split_method=args.split_method,
+        split_ratio=args.split_ratio,
+        validation_ratio=args.validation_ratio,
+        feature_columns=[
+            column.strip()
+            for column in args.feature_columns.split(",")
+            if column.strip()
+        ],
         cache_dir=DATA_DIR,
-        future_steps=FUTURE_STEPS,
-        save_scaler_cache=True,
+        future_steps=args.future_steps,
+        save_scaler_cache=not args.no_save_scalers,
         output_dir=RESULTS_DIR / "c2",
     )
 

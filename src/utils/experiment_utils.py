@@ -5,7 +5,7 @@
 
 import argparse
 import tensorflow as tf
-from config import VALIDATION_RATIO
+from config import SPLIT_METHOD, VALIDATION_RATIO
 
 # ==============================================================================
 # SEED DETERMINISM
@@ -49,6 +49,12 @@ def add_model_arguments(parser: argparse.ArgumentParser) -> None:
             float,
             VALIDATION_RATIO,
             "Chronological validation split ratio relative to the training set.",
+        ),
+        (
+            "--split_method",
+            str,
+            SPLIT_METHOD,
+            "Train/test split strategy: date, ratio, or random.",
         ),
         (
             "--feature_columns",

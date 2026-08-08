@@ -13,6 +13,7 @@ TICKER = "CBA.AX"
 START_DATE = "2020-01-01"
 END_DATE = "2024-07-02"
 SPLIT_DATE = "2023-08-02"  # Chronological split boundary date (train ends 2023-08-01, test starts 2023-08-02)
+SPLIT_METHOD = "date"  # Train/test split strategy: "date" | "ratio" | "random"
 VALIDATION_RATIO = 0.15  # Chronological validation split ratio (relative to the training set)
 
 # ----- Sliding Window Parameters -----
@@ -22,6 +23,11 @@ FUTURE_STEPS = 1  # Number of future steps/days to predict
 
 # ----- Feature Definition -----
 FEATURE_COLUMNS = ["adjclose", "volume", "open", "high", "low"]
+
+# ----- Task C.3 Visualisation Parameters -----
+C3_CANDLE_DAYS = 5  # Trading days aggregated per candle in the summary chart
+C3_BOXPLOT_WINDOW = 10  # Trading days represented by each boxplot
+C3_BOXPLOT_STEP = 10  # Window advance; equal to the window size = non-overlapping
 
 # ----- Experiment Sweep Directories -----
 DATA_DIR = Path("data")
@@ -108,11 +114,35 @@ C4_SWEEP_CONFIGS = {
         "batch_size": 64,
         "description": "LSTM MSE Loss — Outlier-sensitive quadratic loss vs robust Huber baseline",
     },
+    # ---- Epoch Count Comparison ----
+    "LSTM_LONGTRAIN": {
+        "cell_type": "LSTM",
+        "n_layers": 2,
+        "units": 128,
+        "loss": "huber",
+        "epochs": 40,
+        "batch_size": 64,
+        "description": "Long-Train LSTM — Doubled epoch budget vs baseline, tests overfitting onset",
+    },
+    # ---- Batch Size Comparison ----
+    "LSTM_SMALLBATCH": {
+        "cell_type": "LSTM",
+        "n_layers": 2,
+        "units": 128,
+        "loss": "huber",
+        "epochs": 20,
+        "batch_size": 16,
+        "description": "Small-Batch LSTM — Smaller batch size vs baseline, tests gradient noise/generalisation",
+    },
 }
 
 # ==============================================================================
 # TASK C.5 MULTIVARIATE & MULTISTEP EXPERIMENT CONFIGURATIONS
 # ==============================================================================
+# Keep 6 features named in the C.5 brief from FEATURE_COLUMNS 
+# so C.4's already-verified sweep results are unaffected.
+C5_FEATURE_COLUMNS = ["adjclose", "close", "volume", "open", "high", "low"]
+
 C5_SWEEP_CONFIGS = {
     "gru_uni_multistep": {
         "description": "Univariate Multistep (Close Only -> 5 Days Forecast)",
@@ -126,7 +156,7 @@ C5_SWEEP_CONFIGS = {
     },
     "gru_multi_singlestep": {
         "description": "Multivariate Single-Step (All Features -> 1 Day Forecast)",
-        "feature_columns": FEATURE_COLUMNS,
+        "feature_columns": C5_FEATURE_COLUMNS,
         "future_steps": 1,
         "epochs": 20,
         "batch_size": 64,
@@ -136,7 +166,7 @@ C5_SWEEP_CONFIGS = {
     },
     "gru_multi_multistep": {
         "description": "Multivariate Multistep Combined (All Features -> 5 Days Forecast)",
-        "feature_columns": FEATURE_COLUMNS,
+        "feature_columns": C5_FEATURE_COLUMNS,
         "future_steps": 5,
         "epochs": 20,
         "batch_size": 64,

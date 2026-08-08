@@ -27,6 +27,7 @@ from config import (
     START_DATE,
     END_DATE,
     SPLIT_DATE,
+    SPLIT_METHOD,
     VALIDATION_RATIO,
     LOOKBACK_STEPS,
     FORECAST_OFFSET,
@@ -158,7 +159,7 @@ def main():
         scale=True,
         shuffle=False,  # Unshuffled for chronological mapping
         forecast_offset=1,
-        split_by_date=True,
+        split_method=SPLIT_METHOD,
         split_date=SPLIT_DATE,
         validation_ratio=VALIDATION_RATIO,
         feature_columns=["adjclose"],  # Univariate Close only

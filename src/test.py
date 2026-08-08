@@ -31,6 +31,7 @@ from config import (
     START_DATE,
     END_DATE,
     SPLIT_DATE,
+    SPLIT_METHOD,
     VALIDATION_RATIO,
     LOOKBACK_STEPS,
     FORECAST_OFFSET,
@@ -308,6 +309,7 @@ def test_model(
     start_date: str = START_DATE,
     end_date: str = END_DATE,
     split_date: str = SPLIT_DATE,
+    split_method: str = SPLIT_METHOD,
     validation_ratio: float = VALIDATION_RATIO,
     lookback_steps: int = LOOKBACK_STEPS,
     forecast_offset: int = FORECAST_OFFSET,
@@ -358,7 +360,7 @@ def test_model(
         scale=scale,
         shuffle=False,  # DO NOT shuffle for testing/plotting evaluation
         forecast_offset=forecast_offset,
-        split_by_date=True,
+        split_method=split_method,
         split_date=split_date,
         validation_ratio=validation_ratio,
         feature_columns=feature_columns,
@@ -521,5 +523,6 @@ if __name__ == "__main__":
         forecast_offset=args.forecast_offset,
         future_steps=args.future_steps,
         validation_ratio=args.validation_ratio,
+        split_method=args.split_method,
         feature_columns=parse_feature_columns(args.feature_columns),
     )

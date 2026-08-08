@@ -16,7 +16,16 @@ import matplotlib.pyplot as plt
 
 import mplfinance as mpf
 
-from config import TICKER, START_DATE, END_DATE, DATA_DIR
+from config import (
+    TICKER,
+    START_DATE,
+    END_DATE,
+    SPLIT_DATE,
+    DATA_DIR,
+    C3_CANDLE_DAYS,
+    C3_BOXPLOT_WINDOW,
+    C3_BOXPLOT_STEP,
+)
 from data_processing import load_raw_stock_data, standardise_stock_dataframe
 
 
@@ -77,9 +86,7 @@ def plot_candlestick(
     missing_columns = required_columns - set(df.columns)
 
     if missing_columns:
-        raise ValueError(
-            f"Missing candlestick columns: {sorted(missing_columns)}"
-        )
+        raise ValueError(f"Missing candlestick columns: {sorted(missing_columns)}")
 
     df_copy = df.copy()
 
@@ -119,10 +126,7 @@ def plot_candlestick(
 
     # The final trading date in each group is used as the candle date.
     grouped.index = pd.DatetimeIndex(
-        df_copy.index.to_series()
-        .groupby(group_idx, sort=False)
-        .last()
-        .to_numpy()
+        df_copy.index.to_series().groupby(group_idx, sort=False).last().to_numpy()
     )
     grouped.index.name = "Date"
 
@@ -142,15 +146,15 @@ def plot_candlestick(
     # --------------------------------------------------------------------------
     if title is None:
         ticker_name = (
-            df_copy["ticker"].iloc[0]
-            if "ticker" in df_copy.columns
-            else "Stock"
+            df_copy["ticker"].iloc[0] if "ticker" in df_copy.columns else "Stock"
         )
         title = f"{ticker_name} - {n_days}-Trading-Day Candlestick Chart"
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # style="charles" colours rising candles green and falling ones red.
+    # savefig writes straight to file; bbox_inches="tight" trims whitespace.
     mpf.plot(
         grouped,
         type="candle",
@@ -168,10 +172,7 @@ def plot_candlestick(
     )
 
     plt.close("all")
-    print(
-        f"[Visualisation] Saved candlestick chart to: "
-        f"{output_path.as_posix()}"
-    )
+    print(f"[Visualisation] Saved candlestick chart to: {output_path.as_posix()}")
 
 
 # ==============================================================================
@@ -218,25 +219,19 @@ def plot_windowed_boxplot(
     # Phase 1: Validation and index preparation
     # --------------------------------------------------------------------------
     if window_days < 1:
-        raise ValueError(
-            "Parameter window_days must be greater than or equal to 1."
-        )
+        raise ValueError("Parameter window_days must be greater than or equal to 1.")
 
     if df.empty:
         raise ValueError("Input DataFrame is empty. Cannot generate plot.")
 
     if "adjclose" not in df.columns and "close" not in df.columns:
-        raise ValueError(
-            "Boxplot requires either an 'adjclose' or 'close' column."
-        )
+        raise ValueError("Boxplot requires either an 'adjclose' or 'close' column.")
 
     if step_days is None:
         step_days = window_days
 
     if step_days < 1:
-        raise ValueError(
-            "Parameter step_days must be greater than or equal to 1."
-        )
+        raise ValueError("Parameter step_days must be greater than or equal to 1.")
 
     df_copy = df.copy()
 
@@ -253,9 +248,7 @@ def plot_windowed_boxplot(
     # --------------------------------------------------------------------------
     # Phase 2: Window construction and labelling
     # --------------------------------------------------------------------------
-    target_column = (
-        "adjclose" if "adjclose" in df_copy.columns else "close"
-    )
+    target_column = "adjclose" if "adjclose" in df_copy.columns else "close"
 
     data_to_plot: list[np.ndarray] = []
     labels: list[str] = []
@@ -279,6 +272,8 @@ def plot_windowed_boxplot(
     # --------------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(14, 8))
 
+    # patch_artist=True fills the box bodies; without it boxprops facecolor
+    # is ignored. The remaining *props arguments style one element each.
     ax.boxplot(
         data_to_plot,
         patch_artist=True,
@@ -331,28 +326,17 @@ def plot_windowed_boxplot(
 
     if title is None:
         ticker_name = (
-            df_copy["ticker"].iloc[0]
-            if "ticker" in df_copy.columns
-            else "Stock"
+            df_copy["ticker"].iloc[0] if "ticker" in df_copy.columns else "Stock"
         )
 
         if step_days == 1:
-            window_description = (
-                f"{window_days}-Day Moving Windows"
-            )
+            window_description = f"{window_days}-Day Moving Windows"
         elif step_days == window_days:
-            window_description = (
-                f"Non-Overlapping {window_days}-Day Windows"
-            )
+            window_description = f"Non-Overlapping {window_days}-Day Windows"
         else:
-            window_description = (
-                f"{window_days}-Day Windows, Step {step_days}"
-            )
+            window_description = f"{window_days}-Day Windows, Step {step_days}"
 
-        title = (
-            f"{ticker_name} - Price Distribution Across "
-            f"{window_description}"
-        )
+        title = f"{ticker_name} - Price Distribution Across {window_description}"
 
     ax.set_title(
         title,
@@ -373,32 +357,7 @@ def plot_windowed_boxplot(
     )
     plt.close(fig)
 
-    print(
-        f"[Visualisation] Saved windowed boxplot to: "
-        f"{output_path.as_posix()}"
-    )
-
-
-def plot_moving_boxplot(
-    df: pd.DataFrame,
-    n_days: int,
-    output_path: Path,
-    title: str | None = None,
-) -> None:
-    """
-    Backward-compatible wrapper for the original Task C.3 function name.
-
-    This wrapper creates non-overlapping windows, matching the behaviour of
-    the earlier implementation. New code should call
-    ``plot_windowed_boxplot`` directly.
-    """
-    plot_windowed_boxplot(
-        df=df,
-        window_days=n_days,
-        step_days=n_days,
-        output_path=output_path,
-        title=title,
-    )
+    print(f"[Visualisation] Saved windowed boxplot to: {output_path.as_posix()}")
 
 
 # ==============================================================================
@@ -413,9 +372,7 @@ if __name__ == "__main__":
     # --------------------------------------------------------------------------
     # Phase 1: Centralised data retrieval
     # --------------------------------------------------------------------------
-    print(
-        "[Visualisation] Loading data using the centralised data pipeline..."
-    )
+    print("[Visualisation] Loading data using the centralised data pipeline...")
 
     raw_df = load_raw_stock_data(
         ticker=TICKER,
@@ -444,16 +401,11 @@ if __name__ == "__main__":
 
     # 3.1 Daily candlesticks over the test period provide detailed short-term
     # behaviour without overcrowding the full 2020-2024 dataset.
-    test_period_df = df.loc["2023-08-02":"2024-07-02"]
+    test_period_df = df.loc[SPLIT_DATE:END_DATE]
 
-    daily_candlestick_path = (
-        output_dir / f"{TICKER}_1day_candlestick_test_period.png"
-    )
+    daily_candlestick_path = output_dir / f"{TICKER}_1day_candlestick_test_period.png"
 
-    print(
-        "\n[Task C.3] Generating daily candlestick chart "
-        "for the test period..."
-    )
+    print("\n[Task C.3] Generating daily candlestick chart for the test period...")
 
     plot_candlestick(
         test_period_df,
@@ -462,43 +414,40 @@ if __name__ == "__main__":
         title=f"{TICKER} - Daily Candlestick Chart (Test Period)",
     )
 
-    # 3.2 Five trading days per candle reduce daily noise while preserving the
-    # broad trend across the complete dataset.
-    five_day_candlestick_path = (
-        output_dir / f"{TICKER}_5day_candlestick.png"
+    # 3.2 Aggregating several trading days per candle reduces daily noise while
+    # preserving the broad trend across the complete dataset.
+    aggregated_candlestick_path = (
+        output_dir / f"{TICKER}_{C3_CANDLE_DAYS}day_candlestick.png"
     )
 
     print(
-        "\n[Task C.3] Generating 5-trading-day "
+        f"\n[Task C.3] Generating {C3_CANDLE_DAYS}-trading-day "
         "aggregated candlestick chart..."
     )
 
     plot_candlestick(
         df,
-        n_days=5,
-        output_path=five_day_candlestick_path,
-        title=f"{TICKER} - 5-Trading-Day Candlestick Chart",
+        n_days=C3_CANDLE_DAYS,
+        output_path=aggregated_candlestick_path,
+        title=f"{TICKER} - {C3_CANDLE_DAYS}-Trading-Day Candlestick Chart",
     )
 
-    # 3.3 Non-overlapping 10-day windows remain readable while showing how the
-    # price distribution changes over time.
-    boxplot_path = (
-        output_dir / f"{TICKER}_10day_windowed_boxplot.png"
-    )
+    # 3.3 Non-overlapping windows remain readable while showing how the price
+    # distribution changes over time.
+    boxplot_path = output_dir / f"{TICKER}_{C3_BOXPLOT_WINDOW}day_windowed_boxplot.png"
 
     print(
-        "\n[Task C.3] Generating 10-trading-day "
-        "windowed boxplot..."
+        f"\n[Task C.3] Generating {C3_BOXPLOT_WINDOW}-trading-day windowed boxplot..."
     )
 
     plot_windowed_boxplot(
         df,
-        window_days=10,
-        step_days=10,
+        window_days=C3_BOXPLOT_WINDOW,
+        step_days=C3_BOXPLOT_STEP,
         output_path=boxplot_path,
         title=(
             f"{TICKER} - Adjusted Close Distribution "
-            "by 10-Trading-Day Windows"
+            f"by {C3_BOXPLOT_WINDOW}-Trading-Day Windows"
         ),
     )
 
@@ -506,8 +455,5 @@ if __name__ == "__main__":
     # Phase 4: Completion message
     # --------------------------------------------------------------------------
     print("\n" + "=" * 80)
-    print(
-        "TASK C.3 COMPLETED: Visualisations saved to "
-        f"{output_dir.as_posix()}"
-    )
+    print(f"TASK C.3 COMPLETED: Visualisations saved to {output_dir.as_posix()}")
     print("=" * 80)

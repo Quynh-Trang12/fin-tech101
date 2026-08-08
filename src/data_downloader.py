@@ -112,9 +112,6 @@ def download_real_stock_data(
         index=dates,
     )
 
-    # Clean the dataset by handling any missing intervals or NaN values
-    df.ffill(inplace=True)
-    df.bfill(inplace=True)
     df.index.name = ""
 
     return df
