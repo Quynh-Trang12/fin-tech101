@@ -45,7 +45,7 @@ The repository separates implementation code, datasets, generated outputs, refer
 ```text
 fin-tech101/
 ├── baselines/                  # Modified, executable Option C codebases
-├── references/                 # Original Option C codebases
+├── references/                 # Provided, untouched Option C codebases
 ├── data/                       # Cached datasets
 │   └── c7/                     # C.7 intermediate and aligned datasets
 ├── results/                    # Generated artefacts (weights/plots)
@@ -99,7 +99,7 @@ cd fin-tech101
 
 **Create a virtual enviroment:**
 ```bash
-python -m venv .venv
+python -3.12 -m venv .venv
 ```
 
 **Activate the virtual environment:**
@@ -244,12 +244,12 @@ Comprehensive technical documentation is maintained separately through the proje
 
 Available documentation includes:
 
-* **Home** — Project background, scope, and objectives.
-* **Repository Structure** — Responsibilities of each project directory and source module.
-* **System Architecture** — High-level architecture and module interactions.
-* **Environment Setup** — Development environment and dependency rationale.
-* **Running Individual Components** — Usage guide for each executable script.
-* **Experimental Pipeline** — End-to-end workflow from data acquisition to model evaluation.
-* **Evaluation Metrics** — Definitions and interpretation of all reported metrics.
-* **Option C Task Mapping** — Traceability between project requirements and implementation.
-* **Weekly Reports** — Archived reports for Tasks C.1–C.7 documenting weekly progress.
+* **[Home](https://github.com/Quynh-Trang12/fin-tech101/wiki/)** — Project background, scope, and objectives.
+* **[Repository Structure](https://github.com/Quynh-Trang12/fin-tech101/wiki/Repository-Structure)** — Responsibilities of each project directory and source module.
+* **[System Architecture](https://github.com/Quynh-Trang12/fin-tech101/wiki/FinTech101-System-Architecture)** — High-level architecture and module interactions.
+* **[Environment Setup](https://github.com/Quynh-Trang12/fin-tech101/wiki/Environment-Setup)** — Development environment and dependency rationale.
+* **[Running Individual Components](https://github.com/Quynh-Trang12/fin-tech101/wiki/Running-Individual-Components)** — Usage guide for each executable script.
+* **[Experimental Pipeline](https://github.com/Quynh-Trang12/fin-tech101/wiki/Experimental-Pipeline)** — End-to-end workflow from data acquisition to model evaluation.
+* **[Evaluation Metrics](https://github.com/Quynh-Trang12/fin-tech101/wiki/Evaluation-Metrics)** — Definitions and interpretation of all reported metrics.
+* **[Option C Task Mapping](https://github.com/Quynh-Trang12/fin-tech101/wiki/Option-C-Task-Mapping)** — Traceability between project requirements and implementation.
+* **[Weekly Reports](https://github.com/Quynh-Trang12/fin-tech101/wiki/Weekly-Reports)** — Archived reports for Tasks C.1–C.7 documenting weekly progress.
