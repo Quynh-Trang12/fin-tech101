@@ -1,10 +1,10 @@
-# Option C Weekly Report: Task C.4 - Machine Learning (Phase 2)
+# Option C Weekly Report: Task C.5 - Machine Learning (Phase 2)
 
 ## Project Details
 - **Project:** FinTech101 Stock Price Prediction System
 - **Subject:** COS30018 - Intelligent Systems
 - **Task:** Option C - Task C.5: Machine Learning 2 - Multivariate & Multistep Stock Price Forecasting
-- **Target Ticker:** Commonwealth Bank of Australia (`CBA.AX`)
+- **Target Stock:** Commonwealth Bank of Australia (`CBA.AX`)
 - **Report Due:** Week 7
 
 ---

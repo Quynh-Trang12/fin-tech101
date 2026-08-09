@@ -40,23 +40,13 @@ The project is organised as a single, reusable stock forecasting pipeline rather
 
 ### 2.2 Core Forecasting Workflow (C.1–C.5)
 
-The core workflow follows a fixed path: **data source → data processing → model construction → model training → model evaluation → results**.
-
-- `data_processing.py` loads historical price data, cleans it, constructs sliding-window input sequences and forecasting targets, performs a chronological train/test split, and fits feature scalers strictly on the training partition to avoid data leakage.
-- `model_factory.py` builds a compiled LSTM, GRU, or SimpleRNN model from a set of hyperparameters (cell type, depth, width, dropout, loss function), decoupling model architecture from the training logic that consumes it.
-- `train.py` and `test.py` orchestrate fitting and evaluation respectively, so that a model can be evaluated repeatedly without being retrained.
-- `base_sweep.py`, together with `run_c4_sweeps.py` and `run_c5_sweeps.py`, automates running many model configurations through this same workflow, so that Task C.4's hyperparameter comparisons and Task C.5's multivariate/multistep experiments produce directly comparable results.
-- `config.py` centralises every dataset, model, and sweep parameter, so that a configuration change is made once and applied consistently everywhere it is used.
+The core workflow follows a fixed path: **data source → data processing (`data_processing.py`) → model construction (`model_factory.py`) → model training (`train.py`) → model evaluation (`test.py`) → results**. `model_factory.py` builds a compiled LSTM, GRU, or SimpleRNN model from hyperparameters, decoupling architecture choice from training logic; `base_sweep.py`, `run_c4_sweeps.py`, and `run_c5_sweeps.py` automate running many configurations through this same workflow so C.4's and C.5's results are directly comparable; and `config.py` centralises every dataset, model, and sweep parameter in one place.
 
 ### 2.3 Extensions Beyond the Core Workflow (C.6–C.7)
 
-Task C.6 and Task C.7 reuse specific components of the core workflow but do not follow its train-then-evaluate shape, because neither task fits that shape by design.
+Task C.6 and Task C.7 reuse specific components of the core workflow but do not follow its train-then-evaluate shape. `run_c6.py` reuses `data_processing.py` and `model_factory.py`, but trains and evaluates inline in one script: fit an ARIMA baseline, train an LSTM/GRU on its residuals, then combine both predictions — necessary because the residual learner's target depends on ARIMA's output, so the two cannot be trained independently. The Task C.7 `c7_*.py` scripts replace `data_processing.py` entirely with a news-processing chain that downloads GDELT records, extracts V2Tone and FinBERT sentiment, aligns both to trading days, and trains a Logistic Regression classifier on price *direction* rather than price value.
 
-`run_c6.py` reuses `data_processing.py` for its univariate input windows and `model_factory.py` for its LSTM/GRU builder, but trains and evaluates in a single inline sequence: fit an ARIMA baseline, train a deep learning model on the ARIMA model's residuals, then combine both predictions. This differs from the core workflow's separated train/test scripts because the residual learner's training target (the ARIMA error) depends on the ARIMA model's output, so the two models cannot be trained independently.
-
-The Task C.7 `c7_*.py` scripts replace `data_processing.py` entirely with a dedicated news-processing chain, because their input is financial news text rather than price history. This chain downloads GDELT news records, extracts sentiment features using two independent methods (GDELT's V2Tone and FinBERT), aligns them to Australian trading days, and merges them with market data into a labelled classification dataset. The final model is a Logistic Regression classifier predicting price direction, not a recurrent price forecaster, because C.7 reframes the problem as binary classification rather than regression.
-
-Full architecture diagrams, component responsibility tables, and the six formal architectural decisions behind this design are documented in the **System Architecture** and **Experiment Pipeline** Wiki pages.
+Full architecture diagrams and the six formal architectural decisions behind this design are documented in the **System Architecture** and **Experiment Pipeline** Wiki pages.
 
 ---
 
@@ -64,18 +54,11 @@ Full architecture diagrams, component responsibility tables, and the six formal 
 
 ### 3.1 Multi-Feature, Configurable Data Loading (C.2)
 
-The Task C.1 baseline (`v0.1`) used only the closing price as input and required the user to manually choose separate start/end dates for training and testing data. Task C.2 replaced this with `load_and_process_data()`, a single configurable entry point that:
-
-- Accepts a single overall date range and derives train/test partitions from it automatically, rather than requiring four manually chosen dates.
-- Supports multiple feature columns (`adjclose`, `volume`, `open`, `high`, `low`) instead of closing price alone.
-- Handles missing values before sequence construction.
-- Supports three train/test split strategies — chronological by date, chronological by ratio, and random — selected through a single `split_method` parameter.
-- Caches downloaded data locally (`data/<TICKER>_cache.csv`) so repeated runs do not re-query the data source.
-- Fits and stores `MinMaxScaler` objects per feature column, so that scalers used during training can be reloaded for consistent inverse-transformation during evaluation.
+The Task C.1 baseline (`v0.1`) used only the closing price and required manually choosing separate start/end dates for training and testing data. Task C.2 replaced this with `load_and_process_data()`, a single configurable entry point that derives train/test partitions from one overall date range, supports multiple feature columns (`adjclose`, `volume`, `open`, `high`, `low`) instead of closing price alone, handles missing values, offers three split strategies (chronological by date, chronological by ratio, or random), caches downloaded data locally, and fits per-feature `MinMaxScaler`s that are stored for reuse during evaluation.
 
 ### 3.2 Leakage-Safe Ordering
 
-A specific ordering is enforced to prevent information from the test period leaking into training: forecasting targets and sliding windows are constructed first, the chronological split is then performed by the *target* date rather than the input date, and scalers are fitted only on the resulting training partition before being applied to both partitions. This ordering was adopted because splitting by input date alone can allow a window whose *target* falls after the split boundary to still be included in training, which would let the model see outcomes from the test period indirectly.
+A specific ordering prevents test-period information leaking into training: sliding windows and targets are constructed first, the chronological split is performed by the *target* date rather than the input date, and scalers are fitted only on the resulting training partition. Splitting by input date alone can let a window whose target falls after the split boundary remain in training, indirectly exposing the model to test-period outcomes — this ordering avoids that.
 
 ### 3.3 Data Visualisation (C.3)
 
@@ -102,7 +85,7 @@ Task C.4 replaced the single hardcoded LSTM architecture from `v0.1` with `model
 | RNN_BASE | SimpleRNN | 2 | 128 | 3.7622 | 4.4339 | 46.12 |
 | LSTM_SHALLOW | LSTM | 1 | 128 | 4.3150 | 4.6711 | 45.26 |
 
-The GRU cell produced the lowest forecasting error among all ten configurations, ahead of every LSTM variant tested, despite GRU's simpler internal gating structure. Directional accuracy varied only narrowly across configurations (43.97%–46.12%), which suggests that hyperparameter tuning alone had limited effect on the model's ability to predict price *direction*, as distinct from minimising price *error*.
+GRU produced the lowest forecasting error among all ten configurations, ahead of every LSTM variant, despite its simpler gating structure. Directional accuracy varied only narrowly (43.97%–46.12%), suggesting hyperparameter tuning had limited effect on predicting price *direction* versus minimising price *error*.
 
 ### 4.2 Multivariate and Multistep Forecasting (C.5)
 
@@ -116,7 +99,7 @@ Task C.5 extended the single-feature, single-step forecasting from C.4 into two 
 | gru_multi_singlestep | All 6 features | 1 | 2.7635 | 44.83 |
 | gru_multi_multistep | All 6 features | 5 | 3.9973 | 39.33 |
 
-Forecasting error increased substantially as more features and more forecast steps were added simultaneously — the fully multivariate, multistep configuration produced roughly 2.5× the MAE of the univariate multistep configuration. This indicates that adding input features did not, by itself, improve predictive accuracy for this dataset, and that error compounds across a longer forecast horizon.
+Error increased substantially as more features and forecast steps were added simultaneously — the fully multivariate, multistep configuration produced roughly 2.5× the MAE of the univariate multistep one. Adding input features did not, by itself, improve accuracy here, and error compounds across a longer horizon.
 
 ### 4.3 Statistical–Deep Learning Hybrid Forecasting (C.6)
 
@@ -131,7 +114,7 @@ Task C.6 investigated whether combining a statistical ARIMA model with a deep le
 | GRU Baseline (deep learning only) | 1.0660 | 1.3697 | **54.31** | **28.98** |
 | LSTM Baseline (deep learning only) | 1.6174 | 2.0667 | 52.16 | 13.24 |
 
-The best hybrid model, ARIMA(2,1,2) + LSTM, achieved the lowest forecasting error overall — a 0.65% MAE improvement over the best standalone ARIMA baseline — confirming that a deep learning residual learner can extract additional signal left in ARIMA's errors. However, the standalone GRU baseline achieved both the highest directional accuracy and the highest simulated trading profit, despite having a substantially higher MAE than every ARIMA-based model. This shows that minimising price error and maximising trading profitability are not the same objective, and a model selected purely on MAE would not have been the most profitable choice in this experiment.
+The best hybrid, ARIMA(2,1,2) + LSTM, achieved the lowest error overall — a 0.65% MAE improvement over the best standalone ARIMA — confirming the residual learner extracts additional signal from ARIMA's errors. The standalone GRU baseline, however, achieved both the highest directional accuracy and trading profit despite a substantially higher MAE, showing that minimising error and maximising profitability are not the same objective (discussed further in Section 7).
 
 ---
 
@@ -143,12 +126,7 @@ Tasks C.1–C.6 treat stock forecasting as a regression problem: predict the nex
 
 ### 5.2 Data Collection and Feature Engineering
 
-News data was collected from GDELT's Global Knowledge Graph, filtered for Commonwealth Bank-related coverage, and processed through a ten-stage pipeline (`run_c7.py`) that downloads and caches raw records, enriches them with English headlines, computes two independent sentiment representations, aligns both to Australian trading days, and merges them with market data into a labelled dataset:
-
-- **V2Tone** — GDELT's built-in rule-based tone score, aggregated to a daily level.
-- **FinBERT** — a transformer model trained specifically on financial text, run at the article level and aggregated to daily features.
-
-A weekend/holiday alignment step ensures that news published outside a trading day is attributed to the next available trading day, rather than being discarded or misaligned.
+News data was collected from GDELT's Global Knowledge Graph, filtered for Commonwealth Bank-related coverage, and processed through a ten-stage pipeline (`run_c7.py`) that downloads and caches raw records, enriches them with English headlines, computes two independent sentiment representations, aligns both to Australian trading days (attributing news published outside a trading day to the next available one), and merges them with market data into a labelled dataset. **V2Tone** is GDELT's built-in rule-based tone score, aggregated daily; **FinBERT** is a transformer trained on financial text, run at the article level and aggregated to daily features.
 
 ### 5.3 Results
 
@@ -174,25 +152,25 @@ Following the initial results, a feature audit was conducted to diagnose why the
 
 ## 6. Scenarios and Examples
 
-**Scenario 1 — Comparing model architectures for price forecasting (C.4).** A user wants to know whether GRU or LSTM predicts CBA.AX prices more accurately under identical conditions. Running `run_c4_sweeps.py` trains and evaluates both architectures (plus SimpleRNN) across depth, width, and loss-function variants through the same pipeline, producing the directly comparable results in Table 1 — showing GRU_BASE as the most accurate configuration tested.
+**Comparing architectures (C.4).** `run_c4_sweeps.py` trains and evaluates LSTM, GRU, and SimpleRNN variants through the same pipeline, producing Table 1's directly comparable results — GRU_BASE is the most accurate configuration tested.
 
-**Scenario 2 — Forecasting five days ahead instead of one (C.5).** A user wants a five-day-ahead forecast rather than a single-day forecast. Setting `future_steps=5` and running `run_c5_sweeps.py` (or `train.py --future_steps 5`) reuses the identical data pipeline and model builder, changing only the sliding-window target construction — no architecture code changes are required, illustrating the benefit of the shared pipeline design described in Section 2.
+**Changing the forecast horizon (C.5).** Setting `future_steps=5` and running `run_c5_sweeps.py` reuses the identical data pipeline and model builder, changing only the sliding-window target — no architecture changes required.
 
-**Scenario 3 — Testing whether a statistical model improves a deep learning forecast (C.6).** A user wants to check whether combining ARIMA with a neural residual learner beats either approach alone. Running `run_c6.py` performs the full pipeline: stationarity testing, ARIMA fitting, residual learner training, and hybrid evaluation, producing Table 3 and confirming a measurable, if modest, improvement from the hybrid approach.
+**Testing a statistical/DL hybrid (C.6).** `run_c6.py` runs stationarity testing, ARIMA fitting, and residual-learner training end to end, producing Table 3's measurable hybrid improvement.
 
-**Scenario 4 — Testing whether news sentiment improves next-day direction prediction (C.7).** A user wants to know whether adding financial news sentiment to a price-direction classifier helps. Running `run_c7.py` executes the full ten-stage news pipeline and produces Table 4, showing that for this dataset and time period, market data alone remained the strongest predictor.
+**Testing sentiment-augmented classification (C.7).** `run_c7.py` executes the full news pipeline and produces Table 4, showing market data alone remained the strongest predictor for this dataset and period.
 
 ---
 
 ## 7. Critical Analysis
 
-**The core pipeline's reusability held up under real extension pressure.** The clearest evidence for the C.2–C.5 architectural decisions (Section 2.2) is that Task C.6 could reuse `data_processing.py` and `model_factory.py` for an entirely different forecasting strategy (ARIMA + residual learning) without modifying either module, and Task C.4's sweep results remained valid as a baseline for later comparisons because every task shared the same preprocessing and leakage-safe splitting logic.
+**Reusability held up under real extension pressure.** Task C.6 reused `data_processing.py` and `model_factory.py` for an entirely different forecasting strategy without modifying either module, and C.4's sweep results stayed valid as a baseline because every task shared the same preprocessing and leakage-safe splitting logic.
 
-**Minimising forecasting error and maximising trading profitability produced different winners.** In Task C.6, the ARIMA-based hybrid models had the lowest MAE, but the standalone GRU baseline had the highest directional accuracy and by far the highest simulated trading profit ($28.98 vs. $11.04 for the best hybrid). A project that optimised purely for MAE, as is common practice, would have overlooked the model that actually performed best under a trading-oriented evaluation. This is treated in Section 4.3 as a genuine finding, not a contradiction: MAE, directional accuracy, and trading profit measure different things, and no single metric was a good proxy for the other two throughout this project.
+**Error and profitability produced different winners.** In C.6, ARIMA-based hybrids had the lowest MAE, but the standalone GRU baseline had the highest directional accuracy and by far the highest trading profit ($28.98 vs. $11.04 for the best hybrid) — a project optimising purely for MAE would have missed the most profitable model. MAE, directional accuracy, and trading profit measure different things, and none was a reliable proxy for the others.
 
-**Task C.7's negative result is a valid finding, not a failure.** None of the sentiment-enhanced feature sets outperformed the market-only baseline (Table 4). Rather than treating this as an implementation defect, the project used the feature audit (Section 5.4) to establish that the shortfall was attributable to feature redundancy rather than the sentiment signal itself being uninformative — the reduced FinBERT set measurably improved on the full FinBERT set once redundant variables were removed. This distinguishes "sentiment doesn't help this problem" from "the sentiment features were engineered poorly," which is a more defensible and more useful conclusion.
+**C.7's negative result is a finding, not a failure.** No sentiment-enhanced feature set beat the market-only baseline (Table 4), but the feature audit (Section 5.4) showed the shortfall was attributable to feature redundancy, not an uninformative sentiment signal — the reduced FinBERT set measurably improved on the full set once redundant variables were removed.
 
-**Limitations.** All experiments were run on a single ticker (CBA.AX) over one historical period, so results may not generalise to other stocks, sectors, or market regimes. Task C.7's sentiment features were aggregated at a daily level, discarding intraday timing information about when news was published relative to market close. Logistic Regression was deliberately chosen for C.7 as an interpretable baseline; a more expressive classifier might capture nonlinear interactions between market and sentiment features that a linear model cannot.
+**Limitations.** All experiments used a single ticker (CBA.AX) over one period, so results may not generalise. C.7's sentiment was aggregated daily, discarding intraday timing, and Logistic Regression was chosen as an interpretable baseline over a more expressive classifier.
 
 ---
 

@@ -1,11 +1,11 @@
-# Option C - Task C.6 Machine Learning 3 Report
+# Option C Weekly Report: Task C.6 − Machine Learning (Phase 3)
 
 ## Project Details
 - **Project:** FinTech101 Stock Price Prediction System
 - **Subject:** COS30018 - Intelligent Systems
 - **Task:** Option C - Task C.6: Machine Learning 3 - Hybrid Forecasting
-- **Target Ticker:** Commonwealth Bank of Australia (`CBA.AX`)
-- **Report Date:** 22 June 2026
+- **Target Stock:** Commonwealth Bank of Australia (`CBA.AX`)
+- **Report Due:** Week 9
 
 ---
 

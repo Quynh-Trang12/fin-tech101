@@ -1,11 +1,11 @@
-# Option C - Task C.6 Machine Learning 3 Report
+# Option C Weekly Report: Task C.7 − Sentiment-Based Stock Price Movement Prediction (Extension)
 
 ## Project Details
 - **Project:** FinTech101 Stock Price Prediction System
 - **Subject:** COS30018 - Intelligent Systems
 - **Task:** Option C - Task C.7: Extension - Sentiment Based Stock Price Movement Prediction
-- **Target Ticker:** Commonwealth Bank of Australia (`CBA.AX`)
-- **Report Date:** 22 June 2026
+- **Target Dataset:** GDELT ecosystem − **Global Document Graph (GDG)** dataset
+- **Report Due:** Week 12
 
 
 # 1. Introduction

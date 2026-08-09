@@ -4,7 +4,7 @@
 - **Project:** FinTech101 Stock Price Prediction System
 - **Subject:** COS30018 - Intelligent Systems
 - **Task:** Option C - Task C.4: Machine Learning 1
-- **Target Ticker:** Commonwealth Bank of Australia (`CBA.AX`)
+- **Target Stock:** Commonwealth Bank of Australia (`CBA.AX`)
 - **Report Date:** Week 6
 
 ---
